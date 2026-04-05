@@ -559,6 +559,7 @@ class SmartARCSolverV2(SmartARCSolver):
             self._try_rectangles_position_grid,
             self._try_line_from_markers_recolor_rects,
             self._try_fill_columns_with_terminator,
+            self._try_grid_cell_fill_by_corner_marker,
         ]
         for s in v2:
             try:
@@ -12141,3 +12142,121 @@ class SmartARCSolverV2(SmartARCSolver):
             if ok:
                 return solve(test_input, term)
         return None
+
+    # --- _try_shapes_float_to_edges (17829a00) ---
+    def _try_shapes_float_to_edges(self, train, test_input):
+        """Top-edge-color shapes float UP to row 1. Bottom-edge-color shapes sink DOWN to row last-1."""
+        def solve(grid):
+            rows, cols = len(grid), len(grid[0])
+            # Top edge color (row 0 must be uniform)
+            top_color = grid[0][0]
+            if any(v != top_color for v in grid[0]):
+                return None
+            bot_color = grid[rows-1][0]
+            if any(v != bot_color for v in grid[rows-1]):
+                return None
+            bg = None
+            # bg = most common value in interior
+            from collections import Counter
+            c = Counter()
+            for r in range(1, rows-1):
+                for v in grid[r]:
+                    c[v] += 1
+            bg = c.most_common(1)[0][0]
+            # Initialize output: keep edges, fill interior with bg
+            out = [[bg]*cols for _ in range(rows)]
+            out[0] = list(grid[0])
+            out[rows-1] = list(grid[rows-1])
+            # Find components of top_color and bot_color in interior
+            def find_components(color):
+                visited = [[False]*cols for _ in range(rows)]
+                comps = []
+                for r in range(1, rows-1):
+                    for cc in range(cols):
+                        if grid[r][cc] == color and not visited[r][cc]:
+                            queue = [(r, cc)]
+                            visited[r][cc] = True
+                            cells = [(r, cc)]
+                            while queue:
+                                cr, cccc = queue.pop(0)
+                                for dr, dc in [(-1,0),(1,0),(0,-1),(0,1),(-1,-1),(-1,1),(1,-1),(1,1)]:
+                                    nr, nc = cr+dr, cccc+dc
+                                    if 1<=nr<rows-1 and 0<=nc<cols and not visited[nr][nc] and grid[nr][nc] == color:
+                                        visited[nr][nc] = True
+                                        queue.append((nr, nc))
+                                        cells.append((nr, nc))
+                            comps.append(cells)
+                return comps
+
+            for cells in find_components(top_color):
+                mr = min(r for r,cc in cells)
+                dr = 1 - mr  # move so top is at row 1
+                for r, cc in cells:
+                    nr = r + dr
+                    if 0 < nr < rows-1:
+                        out[nr][cc] = top_color
+            for cells in find_components(bot_color):
+                mxr = max(r for r,cc in cells)
+                dr = (rows-2) - mxr
+                for r, cc in cells:
+                    nr = r + dr
+                    if 0 < nr < rows-1:
+                        out[nr][cc] = bot_color
+            return out
+
+        for ex in train:
+            r = solve(ex['input'])
+            if r != ex['output']:
+                return None
+        return solve(test_input)
+
+    # --- _try_grid_cell_fill_by_corner_marker (17b866bd) ---
+    def _try_grid_cell_fill_by_corner_marker(self, train, test_input):
+        """Repeating grid cells separated by 8-lines. Non-zero marker at corner fills adjacent cell."""
+        def solve(grid):
+            rows, cols = len(grid), len(grid[0])
+            # Detect step: find row with all 0 or 8 corner pattern, locate grid line rows
+            # Assume step = some s such that every s-th row and col is a 'corner' row/col.
+            # Find by looking for 0-majority pattern
+            # Find all corner positions: where input typically has 0
+            # Method: find the step by looking for first row after row 0 that matches row 0.
+            for step in range(3, min(rows, cols)):
+                if rows % step == 1 and cols % step == 1:
+                    # Row 0 ~= row step, ignoring marker positions (corners)
+                    def similar(r1, r2, st):
+                        for i in range(len(r1)):
+                            if r1[i] == r2[i]:
+                                continue
+                            if i % st == 0:
+                                continue
+                            return False
+                        return True
+                    if similar(grid[0], grid[step], step):
+                        # Use this step
+                        out = [row[:] for row in grid]
+                        # Find markers
+                        for kr in range(0, rows, step):
+                            for kc in range(0, cols, step):
+                                v = grid[kr][kc]
+                                if v != 0:
+                                    # Clear marker
+                                    out[kr][kc] = 0
+                                    # Fill cell to bottom-right
+                                    br = kr + 1
+                                    bc = kc + 1
+                                    er = kr + step
+                                    ec = kc + step
+                                    if er > rows or ec > cols:
+                                        continue
+                                    for r in range(br, er):
+                                        for c in range(bc, ec):
+                                            if grid[r][c] == 0:
+                                                out[r][c] = v
+                        return out
+            return None
+
+        for ex in train:
+            r = solve(ex['input'])
+            if r != ex['output']:
+                return None
+        return solve(test_input)
