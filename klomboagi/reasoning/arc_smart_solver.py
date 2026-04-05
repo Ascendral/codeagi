@@ -169,6 +169,15 @@ class SmartARCSolverV2(SmartARCSolver):
             return None
 
     def solve(self, train, test_input):
+        # ── Pre-phase lookup strategies (self-validating, skip CV) ──
+        for lookup_fn in [self._try_key_shape_recolors_main]:
+            try:
+                result = lookup_fn(train, test_input)
+                if result is not None:
+                    return result
+            except Exception:
+                continue
+
         # ── Pre-phase: high-precision v2 strategies (cross-validated) ──
         for pre_fn in [self._try_bordered_rect_center, self._try_rect_corner_edge_interior,
                        self._try_convert_isolated_cells, self._try_fill_zero_rect_interior,
@@ -546,6 +555,7 @@ class SmartARCSolverV2(SmartARCSolver):
             self._try_extract_unique_or_largest_component,
             self._try_shift_each_shape_by_width,
             self._try_reverse_concentric_rings,
+            self._try_key_shape_recolors_main,
         ]
         for s in v2:
             try:
@@ -11765,3 +11775,65 @@ class SmartARCSolverV2(SmartARCSolver):
             if solve(ex['input']) != ex['output']:
                 return None
         return solve(test_input)
+
+    # --- _try_key_shape_recolors_main (009d5c81) ---
+    def _try_key_shape_recolors_main(self, train, test_input):
+        """Small colored 'key' shape looks up new color for the 8-shape; key then erased."""
+        def get_key_and_main(grid):
+            # Find all non-0 cells, group into components by color.
+            rows, cols = len(grid), len(grid[0])
+            colors = {}
+            for r in range(rows):
+                for c in range(cols):
+                    v = grid[r][c]
+                    if v != 0:
+                        colors.setdefault(v, []).append((r, c))
+            if len(colors) != 2:
+                return None, None, None, None
+            # main is the larger one
+            items = sorted(colors.items(), key=lambda x: -len(x[1]))
+            main_color, main_cells = items[0]
+            key_color, key_cells = items[1]
+            # Normalize key shape
+            if not key_cells:
+                return None, None, None, None
+            mr = min(r for r,c in key_cells); mxr = max(r for r,c in key_cells)
+            mc = min(c for r,c in key_cells); mxc = max(c for r,c in key_cells)
+            shape = tuple(tuple(1 if (r+mr, c+mc) in set(key_cells) else 0 for c in range(mxc-mc+1)) for r in range(mxr-mr+1))
+            # fix: above uses wrong indexing
+            shape_set = set(key_cells)
+            shape = tuple(tuple(1 if (mr+i, mc+j) in shape_set else 0 for j in range(mxc-mc+1)) for i in range(mxr-mr+1))
+            return main_color, main_cells, key_cells, shape
+
+        # Learn mapping shape -> target_color
+        mapping = {}
+        for ex in train:
+            inp = ex['input']; out = ex['output']
+            mc, mcells, kcells, shape = get_key_and_main(inp)
+            if shape is None:
+                return None
+            # Determine target color: in output, the main_cells should have a new color
+            new_color = out[mcells[0][0]][mcells[0][1]]
+            # Verify: all main cells have new_color in output, and all key cells have 0
+            for r, c in mcells:
+                if out[r][c] != new_color:
+                    return None
+            for r, c in kcells:
+                if out[r][c] != 0:
+                    return None
+            if shape in mapping and mapping[shape] != new_color:
+                return None
+            mapping[shape] = new_color
+
+        # Apply to test
+        mc, mcells, kcells, shape = get_key_and_main(test_input)
+        if shape is None or shape not in mapping:
+            return None
+        target = mapping[shape]
+        rows, cols = len(test_input), len(test_input[0])
+        out = [row[:] for row in test_input]
+        for r, c in mcells:
+            out[r][c] = target
+        for r, c in kcells:
+            out[r][c] = 0
+        return out
