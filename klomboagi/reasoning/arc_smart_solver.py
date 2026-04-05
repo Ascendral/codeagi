@@ -181,7 +181,14 @@ class SmartARCSolverV2(SmartARCSolver):
         # ── Pre-phase: high-precision v2 strategies (cross-validated) ──
         for pre_fn in [self._try_bordered_rect_center, self._try_rect_corner_edge_interior,
                        self._try_convert_isolated_cells, self._try_fill_zero_rect_interior,
-                       self._try_connect_pairs_with_8]:
+                       self._try_connect_pairs_with_8,
+                       self._try_u_shape_fill_or_bottom_line,
+                       self._try_shift_each_shape_by_width,
+                       self._try_reverse_concentric_rings,
+                       self._try_rectangles_position_grid,
+                       self._try_line_from_markers_recolor_rects,
+                       self._try_fill_columns_with_terminator,
+                       self._try_grid_cell_fill_by_corner_marker]:
             try:
                 result = pre_fn(train, test_input)
                 if result is not None:
@@ -560,6 +567,7 @@ class SmartARCSolverV2(SmartARCSolver):
             self._try_line_from_markers_recolor_rects,
             self._try_fill_columns_with_terminator,
             self._try_grid_cell_fill_by_corner_marker,
+            self._try_u_shape_fill_or_bottom_line,
         ]
         for s in v2:
             try:
@@ -11828,6 +11836,15 @@ class SmartARCSolverV2(SmartARCSolver):
             if shape in mapping and mapping[shape] != new_color:
                 return None
             mapping[shape] = new_color
+            # Stricter: verify ENTIRE output matches expected transformation
+            # build predicted output: copy input, set main to new_color, key to 0
+            pred = [r[:] for r in inp]
+            for r, c in mcells:
+                pred[r][c] = new_color
+            for r, c in kcells:
+                pred[r][c] = 0
+            if pred != out:
+                return None
 
         # Apply to test
         mc, mcells, kcells, shape = get_key_and_main(test_input)
@@ -12254,6 +12271,68 @@ class SmartARCSolverV2(SmartARCSolver):
                                                 out[r][c] = v
                         return out
             return None
+
+        for ex in train:
+            r = solve(ex['input'])
+            if r != ex['output']:
+                return None
+        return solve(test_input)
+
+    # --- _try_u_shape_fill_or_bottom_line (db7260a4) ---
+    def _try_u_shape_fill_or_bottom_line(self, train, test_input):
+        """1-marker above U-shape(s). If column falls inside closed-bottom U, fill interior. Else output 1s on bottom row."""
+        def solve(grid):
+            rows, cols = len(grid), len(grid[0])
+            # Find 1-marker
+            marker_col = None
+            for r in range(rows):
+                for c in range(cols):
+                    if grid[r][c] == 1:
+                        if marker_col is not None:
+                            return None  # Multiple markers
+                        marker_col = c
+            if marker_col is None:
+                return None
+            # Find vertical walls: maximal contiguous spans of 2s in each column, length >= 3
+            walls = []  # list of (col, r_top, r_bot)
+            for c in range(cols):
+                r = 0
+                while r < rows:
+                    if grid[r][c] == 2:
+                        r_top = r
+                        while r < rows and grid[r][c] == 2:
+                            r += 1
+                        r_bot = r - 1
+                        if r_bot - r_top >= 2:
+                            walls.append((c, r_top, r_bot))
+                    else:
+                        r += 1
+            out = [row[:] for row in grid]
+            # Clear the 1-marker
+            for r in range(rows):
+                for c in range(cols):
+                    if out[r][c] == 1:
+                        out[r][c] = 0
+            filled = False
+            # For each pair of walls with same span, check closure and fill
+            for i in range(len(walls)):
+                for j in range(i+1, len(walls)):
+                    c1, t1, b1 = walls[i]
+                    c2, t2, b2 = walls[j]
+                    if t1 != t2 or b1 != b2 or c1 >= c2:
+                        continue
+                    # Check bottom row closed between cols
+                    closed = all(grid[b1][c] == 2 for c in range(c1, c2+1))
+                    if closed and c1 <= marker_col <= c2:
+                        for r in range(t1, b1):
+                            for c in range(c1+1, c2):
+                                if out[r][c] == 0:
+                                    out[r][c] = 1
+                        filled = True
+            if not filled:
+                # Fill bottom row with 1s
+                out[rows-1] = [1]*cols
+            return out
 
         for ex in train:
             r = solve(ex['input'])
