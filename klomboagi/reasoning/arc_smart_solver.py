@@ -570,6 +570,7 @@ class SmartARCSolverV2(SmartARCSolver):
             self._try_u_shape_fill_or_bottom_line,
             self._try_enclosed_3x3_hollow,
             self._try_box_with_gap_fill_and_extend,
+            self._try_majority_pixel_of_shapes,
         ]
         for s in v2:
             try:
@@ -12453,6 +12454,69 @@ class SmartARCSolverV2(SmartARCSolver):
                         for cc in range(gc, cols):
                             out[gr][cc] = 2
             return out
+
+        for ex in train:
+            if solve(ex['input']) != ex['output']:
+                return None
+        return solve(test_input)
+
+    # --- _try_majority_pixel_of_shapes (358ba94e) ---
+    def _try_majority_pixel_of_shapes(self, train, test_input):
+        """Find all NxM shapes. Output is the pixel-wise majority."""
+        def solve(grid):
+            rows, cols = len(grid), len(grid[0])
+            from collections import Counter
+            cnt = Counter(v for row in grid for v in row)
+            bg = cnt.most_common(1)[0][0]
+            fg_colors = set(v for row in grid for v in row if v != bg)
+            if len(fg_colors) != 1:
+                return None
+            fg = next(iter(fg_colors))
+            visited = [[False]*cols for _ in range(rows)]
+            shapes = []
+            for r in range(rows):
+                for c in range(cols):
+                    if grid[r][c] == fg and not visited[r][c]:
+                        queue = [(r, c)]
+                        visited[r][c] = True
+                        cells = [(r, c)]
+                        while queue:
+                            cr, cc = queue.pop(0)
+                            for dr in [-1,0,1]:
+                                for dc in [-1,0,1]:
+                                    if dr==0 and dc==0: continue
+                                    nr, nc = cr+dr, cc+dc
+                                    if 0<=nr<rows and 0<=nc<cols and not visited[nr][nc] and grid[nr][nc] == fg:
+                                        visited[nr][nc] = True
+                                        queue.append((nr, nc))
+                                        cells.append((nr, nc))
+                        shapes.append(cells)
+            shape_grids = []
+            for cells in shapes:
+                cs = set(cells)
+                mr = min(r for r,c in cells); mxr = max(r for r,c in cells)
+                mc = min(c for r,c in cells); mxc = max(c for r,c in cells)
+                sg = tuple(tuple(1 if (mr+i, mc+j) in cs else 0 for j in range(mxc-mc+1)) for i in range(mxr-mr+1))
+                shape_grids.append((mxr-mr+1, mxc-mc+1, sg))
+            if len(shape_grids) < 2:
+                return None
+            dim_counts = Counter((h,w) for h,w,_ in shape_grids)
+            common_dim = dim_counts.most_common(1)[0][0]
+            if dim_counts[common_dim] < 2:
+                return None
+            h, w = common_dim
+            same_shapes = [sg for ih,iw,sg in shape_grids if (ih,iw) == common_dim]
+            # Find shape with UNIQUE hole count
+            hole_counts = [sum(1 for row in sg for v in row if v == 0) for sg in same_shapes]
+            cc = Counter(hole_counts)
+            unique_counts = [c for c,n in cc.items() if n == 1]
+            if len(unique_counts) != 1:
+                return None
+            target_count = unique_counts[0]
+            for sg, hc in zip(same_shapes, hole_counts):
+                if hc == target_count:
+                    return [[fg if v else bg for v in row] for row in sg]
+            return None
 
         for ex in train:
             if solve(ex['input']) != ex['output']:
