@@ -556,6 +556,7 @@ class SmartARCSolverV2(SmartARCSolver):
             self._try_shift_each_shape_by_width,
             self._try_reverse_concentric_rings,
             self._try_key_shape_recolors_main,
+            self._try_rectangles_position_grid,
         ]
         for s in v2:
             try:
@@ -11837,3 +11838,67 @@ class SmartARCSolverV2(SmartARCSolver):
         for r, c in kcells:
             out[r][c] = 0
         return out
+
+    # --- _try_rectangles_position_grid (0a1d4ef5) ---
+    def _try_rectangles_position_grid(self, train, test_input):
+        """Find solid rectangles, sort by (row-cluster, col-cluster), return grid of colors."""
+        def get_solid_rects(grid):
+            rows, cols = len(grid), len(grid[0])
+            visited = [[False]*cols for _ in range(rows)]
+            rects = []
+            for r in range(rows):
+                for c in range(cols):
+                    if grid[r][c] != 0 and not visited[r][c]:
+                        color = grid[r][c]
+                        # BFS 4-connected same color
+                        queue = [(r, c)]
+                        visited[r][c] = True
+                        cells = [(r, c)]
+                        while queue:
+                            cr, cc = queue.pop(0)
+                            for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+                                nr, nc = cr+dr, cc+dc
+                                if 0<=nr<rows and 0<=nc<cols and not visited[nr][nc] and grid[nr][nc] == color:
+                                    visited[nr][nc] = True
+                                    queue.append((nr, nc))
+                                    cells.append((nr, nc))
+                        mr = min(rr for rr,cc in cells); mxr = max(rr for rr,cc in cells)
+                        mc = min(cc for rr,cc in cells); mxc = max(cc for rr,cc in cells)
+                        area = (mxr-mr+1)*(mxc-mc+1)
+                        # Only solid rects of size >= 6
+                        if area >= 6 and len(cells) == area:
+                            rects.append((color, mr, mc, mxr, mxc))
+            return rects
+
+        def solve(grid):
+            rects = get_solid_rects(grid)
+            if not rects:
+                return None
+            # Cluster by row: sort by row center
+            rect_info = [(c, (mr+mxr)/2, (mc+mxc)/2) for c,mr,mc,mxr,mxc in rects]
+            # Cluster into rows
+            rect_info.sort(key=lambda x: x[1])
+            row_groups = []
+            cur = [rect_info[0]]
+            for r in rect_info[1:]:
+                if abs(r[1] - cur[-1][1]) <= 3:
+                    cur.append(r)
+                else:
+                    row_groups.append(cur)
+                    cur = [r]
+            row_groups.append(cur)
+            # Sort each row by col
+            for g in row_groups:
+                g.sort(key=lambda x: x[2])
+            # Check all rows have same length
+            n = len(row_groups[0])
+            for g in row_groups:
+                if len(g) != n:
+                    return None
+            out = [[g[i][0] for i in range(n)] for g in row_groups]
+            return out
+
+        for ex in train:
+            if solve(ex['input']) != ex['output']:
+                return None
+        return solve(test_input)
