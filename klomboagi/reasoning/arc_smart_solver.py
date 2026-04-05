@@ -569,6 +569,7 @@ class SmartARCSolverV2(SmartARCSolver):
             self._try_grid_cell_fill_by_corner_marker,
             self._try_u_shape_fill_or_bottom_line,
             self._try_enclosed_3x3_hollow,
+            self._try_box_with_gap_fill_and_extend,
         ]
         for s in v2:
             try:
@@ -12374,6 +12375,84 @@ class SmartARCSolverV2(SmartARCSolver):
                 if mr <= cr <= mxr and mc <= cc <= mxc:
                     return [[color,color,color],[color,bg,color],[color,color,color]]
             return None
+
+        for ex in train:
+            if solve(ex['input']) != ex['output']:
+                return None
+        return solve(test_input)
+
+    # --- _try_box_with_gap_fill_and_extend (292dd178) ---
+    def _try_box_with_gap_fill_and_extend(self, train, test_input):
+        """1-box with gap in wall: fill interior with 2, extend 2s through gap to grid edge."""
+        def solve(grid):
+            rows, cols = len(grid), len(grid[0])
+            from collections import Counter
+            cnt = Counter(v for row in grid for v in row)
+            bg = cnt.most_common(1)[0][0]
+            # Find non-bg color (box color)
+            box_colors = set(v for row in grid for v in row if v != bg)
+            if len(box_colors) != 1:
+                return None
+            box_color = next(iter(box_colors))
+            # Find 1-boxes (connected components)
+            visited = [[False]*cols for _ in range(rows)]
+            comps = []
+            for r in range(rows):
+                for c in range(cols):
+                    if grid[r][c] == box_color and not visited[r][c]:
+                        queue = [(r, c)]
+                        visited[r][c] = True
+                        cells = [(r, c)]
+                        while queue:
+                            cr, cc = queue.pop(0)
+                            for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+                                nr, nc = cr+dr, cc+dc
+                                if 0<=nr<rows and 0<=nc<cols and not visited[nr][nc] and grid[nr][nc] == box_color:
+                                    visited[nr][nc] = True
+                                    queue.append((nr, nc))
+                                    cells.append((nr, nc))
+                        comps.append(cells)
+            out = [row[:] for row in grid]
+            for cells in comps:
+                mr = min(r for r,c in cells); mxr = max(r for r,c in cells)
+                mc = min(c for r,c in cells); mxc = max(c for r,c in cells)
+                if mxr - mr < 2 or mxc - mc < 2:
+                    continue
+                cs = set(cells)
+                # Find gaps in walls
+                gaps = []  # (r, c, direction_outward)
+                for c in range(mc, mxc+1):
+                    if (mr, c) not in cs:
+                        gaps.append((mr, c, 'up'))
+                    if (mxr, c) not in cs:
+                        gaps.append((mxr, c, 'down'))
+                for r in range(mr, mxr+1):
+                    if (r, mc) not in cs:
+                        gaps.append((r, mc, 'left'))
+                    if (r, mxc) not in cs:
+                        gaps.append((r, mxc, 'right'))
+                if not gaps:
+                    continue
+                # Fill interior with 2
+                for r in range(mr+1, mxr):
+                    for c in range(mc+1, mxc):
+                        if grid[r][c] == bg:
+                            out[r][c] = 2
+                # Extend through each gap to edge
+                for gr, gc, dirn in gaps:
+                    if dirn == 'up':
+                        for rr in range(gr, -1, -1):
+                            out[rr][gc] = 2
+                    elif dirn == 'down':
+                        for rr in range(gr, rows):
+                            out[rr][gc] = 2
+                    elif dirn == 'left':
+                        for cc in range(gc, -1, -1):
+                            out[gr][cc] = 2
+                    elif dirn == 'right':
+                        for cc in range(gc, cols):
+                            out[gr][cc] = 2
+            return out
 
         for ex in train:
             if solve(ex['input']) != ex['output']:
