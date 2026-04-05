@@ -568,6 +568,7 @@ class SmartARCSolverV2(SmartARCSolver):
             self._try_fill_columns_with_terminator,
             self._try_grid_cell_fill_by_corner_marker,
             self._try_u_shape_fill_or_bottom_line,
+            self._try_enclosed_3x3_hollow,
         ]
         for s in v2:
             try:
@@ -12337,5 +12338,44 @@ class SmartARCSolverV2(SmartARCSolver):
         for ex in train:
             r = solve(ex['input'])
             if r != ex['output']:
+                return None
+        return solve(test_input)
+
+    # --- _try_enclosed_3x3_hollow (bf699163) ---
+    def _try_enclosed_3x3_hollow(self, train, test_input):
+        """Many 3x3 hollow squares; one big enclosing shape. Return the 3x3 hollow whose center is in the big shape's bbox."""
+        def solve(grid):
+            rows, cols = len(grid), len(grid[0])
+            from collections import Counter
+            cnt = Counter(v for row in grid for v in row)
+            bg = cnt.most_common(1)[0][0]
+            hollows = []
+            for r in range(rows-2):
+                for c in range(cols-2):
+                    cells = [grid[r+i][c+j] for i in range(3) for j in range(3)]
+                    center = grid[r+1][c+1]
+                    border = [cells[0],cells[1],cells[2],cells[3],cells[5],cells[6],cells[7],cells[8]]
+                    if center == bg and len(set(border)) == 1 and border[0] != bg:
+                        hollows.append((border[0], r+1, c+1))
+            if not hollows:
+                return None
+            hollow_cells = set()
+            for color, cr, cc in hollows:
+                for i in range(-1,2):
+                    for j in range(-1,2):
+                        hollow_cells.add((cr+i, cc+j))
+            big_cells = [(r,c) for r in range(rows) for c in range(cols)
+                         if grid[r][c] != bg and (r,c) not in hollow_cells]
+            if not big_cells:
+                return None
+            mr = min(r for r,c in big_cells); mxr = max(r for r,c in big_cells)
+            mc = min(c for r,c in big_cells); mxc = max(c for r,c in big_cells)
+            for color, cr, cc in hollows:
+                if mr <= cr <= mxr and mc <= cc <= mxc:
+                    return [[color,color,color],[color,bg,color],[color,color,color]]
+            return None
+
+        for ex in train:
+            if solve(ex['input']) != ex['output']:
                 return None
         return solve(test_input)
