@@ -170,7 +170,7 @@ class SmartARCSolverV2(SmartARCSolver):
 
     def solve(self, train, test_input):
         # ── Pre-phase lookup strategies (self-validating, skip CV) ──
-        for lookup_fn in [self._try_key_shape_recolors_main]:
+        for lookup_fn in [self._try_key_shape_recolors_main, self._try_block_pattern_lookup]:
             try:
                 result = lookup_fn(train, test_input)
                 if result is not None:
@@ -11985,3 +11985,90 @@ class SmartARCSolverV2(SmartARCSolver):
             if solve(ex['input']) != ex['output']:
                 return None
         return solve(test_input)
+
+    # --- _try_block_pattern_lookup (17cae0c1) ---
+    def _try_block_pattern_lookup(self, train, test_input):
+        """Split input into kxk blocks; map each block's marker-pattern to a color; output solid blocks."""
+        def get_blocks(grid, bh, bw, nh, nw):
+            blocks = []
+            for br in range(nh):
+                row_blocks = []
+                for bc in range(nw):
+                    patt = []
+                    for r in range(bh):
+                        row = []
+                        for c in range(bw):
+                            v = grid[br*bh+r][bc*bw+c]
+                            row.append(1 if v != 0 else 0)
+                        patt.append(tuple(row))
+                    row_blocks.append(tuple(patt))
+                blocks.append(row_blocks)
+            return blocks
+
+        def learn_mapping(train):
+            # Determine block size from training
+            # Try dividing input dims into blocks matching output dims
+            ex0 = train[0]
+            inp = ex0['input']; out = ex0['output']
+            in_h, in_w = len(inp), len(inp[0])
+            out_h, out_w = len(out), len(out[0])
+            if in_h != out_h or in_w != out_w:
+                return None, None, None, None
+            # Find block size by finding output blocks of solid color
+            # Try block sizes
+            for bh in range(1, in_h+1):
+                if in_h % bh != 0:
+                    continue
+                for bw in range(1, in_w+1):
+                    if in_w % bw != 0:
+                        continue
+                    nh = in_h // bh
+                    nw = in_w // bw
+                    if nh * nw < 2:
+                        continue
+                    # Check that in all examples, each output block is uniform color
+                    ok = True
+                    mapping = {}
+                    for ex in train:
+                        inp = ex['input']; out = ex['output']
+                        if len(inp) != in_h or len(inp[0]) != in_w:
+                            ok = False; break
+                        for br in range(nh):
+                            for bc in range(nw):
+                                # Check solid
+                                c0 = out[br*bh][bc*bw]
+                                for r in range(bh):
+                                    for c in range(bw):
+                                        if out[br*bh+r][bc*bw+c] != c0:
+                                            ok = False; break
+                                    if not ok: break
+                                if not ok: break
+                                # Input pattern
+                                patt = tuple(tuple(1 if inp[br*bh+r][bc*bw+c] != 0 else 0 for c in range(bw)) for r in range(bh))
+                                if patt in mapping and mapping[patt] != c0:
+                                    ok = False; break
+                                mapping[patt] = c0
+                            if not ok: break
+                        if not ok: break
+                    if ok and mapping:
+                        return bh, bw, nh, nw, mapping
+            return None, None, None, None, None
+
+        res = learn_mapping(train)
+        if res[0] is None:
+            return None
+        bh, bw, nh, nw, mapping = res
+        in_h, in_w = len(test_input), len(test_input[0])
+        if in_h % bh != 0 or in_w % bw != 0:
+            return None
+        out = [[0]*in_w for _ in range(in_h)]
+        for br in range(in_h // bh):
+            for bc in range(in_w // bw):
+                patt = tuple(tuple(1 if test_input[br*bh+r][bc*bw+c] != 0 else 0 for c in range(bw)) for r in range(bh))
+                if patt not in mapping:
+                    return None
+                color = mapping[patt]
+                for r in range(bh):
+                    for c in range(bw):
+                        out[br*bh+r][bc*bw+c] = color
+        return out
