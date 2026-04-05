@@ -557,6 +557,7 @@ class SmartARCSolverV2(SmartARCSolver):
             self._try_reverse_concentric_rings,
             self._try_key_shape_recolors_main,
             self._try_rectangles_position_grid,
+            self._try_line_from_markers_recolor_rects,
         ]
         for s in v2:
             try:
@@ -11896,6 +11897,88 @@ class SmartARCSolverV2(SmartARCSolver):
                 if len(g) != n:
                     return None
             out = [[g[i][0] for i in range(n)] for g in row_groups]
+            return out
+
+        for ex in train:
+            if solve(ex['input']) != ex['output']:
+                return None
+        return solve(test_input)
+
+    # --- _try_line_from_markers_recolor_rects (0d87d2a6) ---
+    def _try_line_from_markers_recolor_rects(self, train, test_input):
+        """Pairs of 1-markers define lines; draw line; rectangles crossed by line get recolored to marker color."""
+        def solve(grid):
+            rows, cols = len(grid), len(grid[0])
+            # Find marker color (not 0, not bg rect color)
+            from collections import Counter
+            counts = Counter()
+            for row in grid:
+                for v in row:
+                    if v != 0:
+                        counts[v] += 1
+            if len(counts) < 2:
+                return None
+            # Marker is the less frequent isolated-cell color; rect color is the more frequent
+            # Find cells by color
+            by_color = {}
+            for r in range(rows):
+                for c in range(cols):
+                    if grid[r][c] != 0:
+                        by_color.setdefault(grid[r][c], []).append((r, c))
+            # Marker = color whose cells are all singletons (no 4-adjacent same-color)
+            marker = None
+            rect_color = None
+            for color, cells in by_color.items():
+                cs = set(cells)
+                is_singleton_only = all(
+                    (r-1,c) not in cs and (r+1,c) not in cs and (r,c-1) not in cs and (r,c+1) not in cs
+                    for r,c in cells
+                )
+                if is_singleton_only:
+                    marker = color
+                else:
+                    rect_color = color
+            if marker is None or rect_color is None:
+                return None
+            markers = by_color[marker]
+            # Find pairs aligned on same row or col
+            out = [row[:] for row in grid]
+            lines_rows = set()  # rows with horizontal lines
+            lines_cols = set()  # cols with vertical lines
+            horz_ranges = []  # (r, c1, c2)
+            vert_ranges = []  # (c, r1, r2)
+            used = set()
+            for i in range(len(markers)):
+                for j in range(i+1, len(markers)):
+                    r1, c1 = markers[i]; r2, c2 = markers[j]
+                    # Only pair markers on opposite edges
+                    if r1 == r2 and ((c1 == 0 and c2 == cols-1) or (c2 == 0 and c1 == cols-1)):
+                        horz_ranges.append((r1, 0, cols-1))
+                    elif c1 == c2 and ((r1 == 0 and r2 == rows-1) or (r2 == 0 and r1 == rows-1)):
+                        vert_ranges.append((c1, 0, rows-1))
+            if not horz_ranges and not vert_ranges:
+                return None
+            # Draw lines
+            for r, ca, cb in horz_ranges:
+                for c in range(ca, cb+1):
+                    out[r][c] = marker
+            for c, ra, rb in vert_ranges:
+                for r in range(ra, rb+1):
+                    out[r][c] = marker
+            # Flood-fill: any rect_color cell 4-adjacent to a marker cell becomes marker, recursively.
+            from collections import deque
+            queue = deque()
+            for r in range(rows):
+                for c in range(cols):
+                    if out[r][c] == marker:
+                        queue.append((r, c))
+            while queue:
+                cr, cc = queue.popleft()
+                for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+                    nr, nc = cr+dr, cc+dc
+                    if 0<=nr<rows and 0<=nc<cols and out[nr][nc] == rect_color:
+                        out[nr][nc] = marker
+                        queue.append((nr, nc))
             return out
 
         for ex in train:
