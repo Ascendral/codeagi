@@ -558,6 +558,7 @@ class SmartARCSolverV2(SmartARCSolver):
             self._try_key_shape_recolors_main,
             self._try_rectangles_position_grid,
             self._try_line_from_markers_recolor_rects,
+            self._try_fill_columns_with_terminator,
         ]
         for s in v2:
             try:
@@ -12072,3 +12073,71 @@ class SmartARCSolverV2(SmartARCSolver):
                     for c in range(bw):
                         out[br*bh+r][bc*bw+c] = color
         return out
+
+    # --- _try_fill_columns_with_terminator (17b80ad2) ---
+    def _try_fill_columns_with_terminator(self, train, test_input):
+        """For each column ending with terminator (e.g., 5), sort markers by row, fill segments [prev+1..cur] with cur's color."""
+        def detect_terminator(grid):
+            # Find candidate terminator: value that appears in bottom rows of multiple columns
+            rows, cols = len(grid), len(grid[0])
+            from collections import Counter
+            counts = Counter()
+            for r in range(rows):
+                for c in range(cols):
+                    if grid[r][c] != 0:
+                        counts[grid[r][c]] += 1
+            if not counts:
+                return None
+            # Terminator: most frequent non-zero, or specifically the one that appears at bottom
+            return None  # We'll try all candidates
+
+        def solve(grid, term):
+            rows, cols = len(grid), len(grid[0])
+            out = [row[:] for row in grid]
+            for c in range(cols):
+                # Collect markers in this col
+                markers = [(r, grid[r][c]) for r in range(rows) if grid[r][c] != 0]
+                if not markers:
+                    continue
+                # Does col have terminator?
+                has_term = any(v == term for r,v in markers)
+                if not has_term:
+                    continue
+                # Sort by row
+                markers.sort()
+                prev = -1
+                for r, v in markers:
+                    for rr in range(prev+1, r+1):
+                        out[rr][c] = v
+                    prev = r
+            # Also rows
+            for r in range(rows):
+                markers = [(c, grid[r][c]) for c in range(cols) if grid[r][c] != 0]
+                if not markers:
+                    continue
+                has_term = any(v == term for c,v in markers)
+                if not has_term:
+                    continue
+                markers.sort()
+                # Check: don't overwrite col-filled cells unless consistent
+                # Simpler: only do row fill if col fill didn't happen for this row
+                # Actually the rule: do col fill only, not row. But some tasks may need both.
+                # Skip row fills for now
+            return out
+
+        # Learn terminator from training
+        candidates = set()
+        for ex in train:
+            for row in ex['input']:
+                for v in row:
+                    if v != 0:
+                        candidates.add(v)
+        for term in candidates:
+            ok = True
+            for ex in train:
+                r = solve(ex['input'], term)
+                if r != ex['output']:
+                    ok = False; break
+            if ok:
+                return solve(test_input, term)
+        return None
