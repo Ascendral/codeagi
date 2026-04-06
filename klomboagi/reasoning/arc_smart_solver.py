@@ -571,6 +571,7 @@ class SmartARCSolverV2(SmartARCSolver):
             self._try_enclosed_3x3_hollow,
             self._try_box_with_gap_fill_and_extend,
             self._try_majority_pixel_of_shapes,
+            self._try_overlay_bordered_rect_interiors,
         ]
         for s in v2:
             try:
@@ -12517,6 +12518,62 @@ class SmartARCSolverV2(SmartARCSolver):
                 if hc == target_count:
                     return [[fg if v else bg for v in row] for row in sg]
             return None
+
+        for ex in train:
+            if solve(ex['input']) != ex['output']:
+                return None
+        return solve(test_input)
+
+    # --- _try_overlay_bordered_rect_interiors (25e02866) ---
+    def _try_overlay_bordered_rect_interiors(self, train, test_input):
+        """Multiple bordered rectangles. Overlay their interior patterns into one combined rect."""
+        def solve(grid):
+            rows, cols = len(grid), len(grid[0])
+            from collections import Counter
+            cnt = Counter(v for row in grid for v in row)
+            bg = cnt.most_common(1)[0][0]
+            # Find bordered rectangles
+            visited = [[False]*cols for _ in range(rows)]
+            rects = []
+            for r in range(rows):
+                for c in range(cols):
+                    if grid[r][c] != bg and not visited[r][c]:
+                        color = grid[r][c]
+                        queue = [(r, c)]
+                        visited[r][c] = True
+                        cells = [(r, c)]
+                        while queue:
+                            cr, cc = queue.pop(0)
+                            for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+                                nr, nc = cr+dr, cc+dc
+                                if 0<=nr<rows and 0<=nc<cols and not visited[nr][nc] and grid[nr][nc] != bg:
+                                    visited[nr][nc] = True
+                                    queue.append((nr, nc))
+                                    cells.append((nr, nc))
+                        mr = min(rr for rr,cc in cells); mxr = max(rr for rr,cc in cells)
+                        mc = min(cc for rr,cc in cells); mxc = max(cc for rr,cc in cells)
+                        rects.append((mr, mc, mxr, mxc))
+            if len(rects) < 2:
+                return None
+            # All rects should have same dimensions
+            dims = set((mxr-mr+1, mxc-mc+1) for mr,mc,mxr,mxc in rects)
+            if len(dims) != 1:
+                return None
+            h, w = next(iter(dims))
+            if h < 3 or w < 3:
+                return None
+            # Border color should be consistent
+            border_color = grid[rects[0][0]][rects[0][1]]
+            # Build output: start with border_color filled rect
+            out = [[border_color]*w for _ in range(h)]
+            # Overlay each rect's interior
+            for mr, mc, mxr, mxc in rects:
+                for i in range(1, h-1):
+                    for j in range(1, w-1):
+                        v = grid[mr+i][mc+j]
+                        if v != border_color:
+                            out[i][j] = v
+            return out
 
         for ex in train:
             if solve(ex['input']) != ex['output']:
