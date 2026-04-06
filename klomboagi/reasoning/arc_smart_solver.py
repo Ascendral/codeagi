@@ -572,6 +572,8 @@ class SmartARCSolverV2(SmartARCSolver):
             self._try_box_with_gap_fill_and_extend,
             self._try_majority_pixel_of_shapes,
             self._try_overlay_bordered_rect_interiors,
+            self._try_xor_halves,
+            self._try_shape_colored_by_key_columns,
         ]
         for s in v2:
             try:
@@ -12573,6 +12575,129 @@ class SmartARCSolverV2(SmartARCSolver):
                         v = grid[mr+i][mc+j]
                         if v != border_color:
                             out[i][j] = v
+            return out
+
+        for ex in train:
+            if solve(ex['input']) != ex['output']:
+                return None
+        return solve(test_input)
+
+    # --- _try_xor_halves (31d5ba1a) ---
+    def _try_xor_halves(self, train, test_input):
+        """Split grid into top/bottom halves. Output = XOR: 6 where exactly one half is non-zero, else 0."""
+        def solve(grid, fill_color):
+            rows, cols = len(grid), len(grid[0])
+            if rows % 2 != 0:
+                return None
+            half = rows // 2
+            out = [[0]*cols for _ in range(half)]
+            for r in range(half):
+                for c in range(cols):
+                    a = grid[r][c] != 0
+                    b = grid[half+r][c] != 0
+                    if a != b:
+                        out[r][c] = fill_color
+            return out
+
+        # Learn fill_color from first example
+        fill_colors = set()
+        for ex in train:
+            for row in ex['output']:
+                for v in row:
+                    if v != 0:
+                        fill_colors.add(v)
+        if len(fill_colors) != 1:
+            return None
+        fill_color = next(iter(fill_colors))
+        for ex in train:
+            if solve(ex['input'], fill_color) != ex['output']:
+                return None
+        return solve(test_input, fill_color)
+
+    # --- _try_largest_solid_block_color (3194b014) ---
+    def _try_largest_solid_block_color(self, train, test_input):
+        """Find largest solid rectangular block. Output 3x3 filled with its color."""
+        def solve(grid):
+            rows, cols = len(grid), len(grid[0])
+            from collections import Counter
+            # Exclude top-2 most common colors (background noise)
+            cnt = Counter(v for row in grid for v in row)
+            bg_colors = set(c for c, _ in cnt.most_common(2))
+            # For each remaining color, find the largest axis-aligned solid rectangle
+            best_color = None
+            best_area = 0
+            for color in set(v for row in grid for v in row):
+                if color in bg_colors:
+                    continue
+                # Find maximal solid rectangle of this color using brute force
+                for r1 in range(rows):
+                    for c1 in range(cols):
+                        if grid[r1][c1] != color:
+                            continue
+                        # Expand down and right
+                        max_c2 = cols - 1
+                        for r2 in range(r1, rows):
+                            # Find rightmost extent at this row
+                            c2 = c1
+                            while c2 <= max_c2 and grid[r2][c2] == color:
+                                c2 += 1
+                            c2 -= 1
+                            if c2 < c1:
+                                break
+                            max_c2 = c2
+                            area = (r2 - r1 + 1) * (c2 - c1 + 1)
+                            if area > best_area:
+                                best_area = area
+                                best_color = color
+            if best_color is None or best_area < 6:
+                return None
+            return [[best_color]*3 for _ in range(3)]
+
+        for ex in train:
+            if solve(ex['input']) != ex['output']:
+                return None
+        return solve(test_input)
+
+    # --- _try_shape_colored_by_key_columns (278e5215) ---
+    def _try_shape_colored_by_key_columns(self, train, test_input):
+        """5-shape + color key. Output: each column gets its key color where shape=5, separator color where shape=0."""
+        def solve(grid):
+            rows, cols = len(grid), len(grid[0])
+            # Find 5-cells (shape)
+            shape_cells = [(r,c) for r in range(rows) for c in range(cols) if grid[r][c] == 5]
+            if not shape_cells:
+                return None
+            mr = min(r for r,c in shape_cells); mxr = max(r for r,c in shape_cells)
+            mc = min(c for r,c in shape_cells); mxc = max(c for r,c in shape_cells)
+            sh = mxr - mr + 1; sw = mxc - mc + 1
+            shape = [[1 if grid[mr+i][mc+j] == 5 else 0 for j in range(sw)] for i in range(sh)]
+            # Find key block: non-0, non-5 rectangle
+            key_cells = [(r,c) for r in range(rows) for c in range(cols) if grid[r][c] not in (0, 5)]
+            if not key_cells:
+                return None
+            kr = min(r for r,c in key_cells); kxr = max(r for r,c in key_cells)
+            kc = min(c for r,c in key_cells); kxc = max(c for r,c in key_cells)
+            kw = kxc - kc + 1
+            if kw != sw:
+                return None
+            # Extract column colors and separator
+            key_rows = [[grid[kr+i][kc+j] for j in range(kw)] for i in range(kxr-kr+1)]
+            # Find separator row (uniform color)
+            sep_color = None
+            col_colors = [None] * kw
+            for row in key_rows:
+                if len(set(row)) == 1:
+                    sep_color = row[0]
+                else:
+                    for j in range(kw):
+                        col_colors[j] = row[j]
+            if sep_color is None or any(c is None for c in col_colors):
+                return None
+            # Build output
+            out = [[0]*sw for _ in range(sh)]
+            for i in range(sh):
+                for j in range(sw):
+                    out[i][j] = col_colors[j] if shape[i][j] else sep_color
             return out
 
         for ex in train:
