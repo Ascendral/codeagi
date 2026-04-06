@@ -580,6 +580,7 @@ class SmartARCSolverV2(SmartARCSolver):
             self._try_stack_4_panels_priority,
             self._try_tile_shape_by_marker_count,
             self._try_extract_shape_with_8_marker,
+            self._try_merge_complementary_shapes,
         ]
         for s in v2:
             try:
@@ -13013,6 +13014,61 @@ class SmartARCSolverV2(SmartARCSolver):
             for r, c in cells:
                 out[r-mr][c-mc] = shape_color
             return out
+
+        for ex in train:
+            if solve(ex['input']) != ex['output']:
+                return None
+        return solve(test_input)
+
+    # --- _try_merge_complementary_shapes (681b3aeb) ---
+    def _try_merge_complementary_shapes(self, train, test_input):
+        """Two shapes that together tile a rectangle. Output = merged rectangle with each cell colored."""
+        def solve(grid):
+            rows, cols = len(grid), len(grid[0])
+            # Find non-zero connected components
+            visited = [[False]*cols for _ in range(rows)]
+            shapes = []
+            for r in range(rows):
+                for c in range(cols):
+                    if grid[r][c] != 0 and not visited[r][c]:
+                        color = grid[r][c]
+                        queue = [(r, c)]; visited[r][c] = True; cells = [(r, c)]
+                        while queue:
+                            cr, cc = queue.pop(0)
+                            for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+                                nr, nc = cr+dr, cc+dc
+                                if 0<=nr<rows and 0<=nc<cols and not visited[nr][nc] and grid[nr][nc] == color:
+                                    visited[nr][nc] = True; queue.append((nr, nc)); cells.append((nr, nc))
+                        shapes.append((color, cells))
+            if len(shapes) != 2:
+                return None
+            c1, cells1 = shapes[0]; c2, cells2 = shapes[1]
+            # Normalize each shape to (0,0) origin
+            def normalize(cells):
+                mr = min(r for r,c in cells); mc = min(c for r,c in cells)
+                return frozenset((r-mr, c-mc) for r,c in cells)
+            n1 = normalize(cells1); n2 = normalize(cells2)
+            h1 = max(r for r,c in n1)+1; w1 = max(c for r,c in n1)+1
+            h2 = max(r for r,c in n2)+1; w2 = max(c for r,c in n2)+1
+            # Try all offsets of shape2 relative to shape1 so they tile a rectangle
+            for dr in range(-h2, h1+1):
+                for dc in range(-w2, w1+1):
+                    shifted2 = frozenset((r+dr, c+dc) for r,c in n2)
+                    combined = n1 | shifted2
+                    if n1 & shifted2:
+                        continue  # overlap
+                    mr = min(r for r,c in combined); mc = min(c for r,c in combined)
+                    mxr = max(r for r,c in combined); mxc = max(c for r,c in combined)
+                    h = mxr-mr+1; w = mxc-mc+1
+                    if len(combined) == h * w:
+                        # Full rectangle
+                        out = [[0]*w for _ in range(h)]
+                        for r, c in n1:
+                            out[r-mr][c-mc] = c1
+                        for r, c in shifted2:
+                            out[r-mr][c-mc] = c2
+                        return out
+            return None
 
         for ex in train:
             if solve(ex['input']) != ex['output']:
