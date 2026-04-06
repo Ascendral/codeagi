@@ -578,6 +578,8 @@ class SmartARCSolverV2(SmartARCSolver):
             self._try_patch_into_5rect_hole,
             self._try_stack_3_panels_priority,
             self._try_stack_4_panels_priority,
+            self._try_tile_shape_by_marker_count,
+            self._try_extract_shape_with_8_marker,
         ]
         for s in v2:
             try:
@@ -12937,3 +12939,82 @@ class SmartARCSolverV2(SmartARCSolver):
             if ok:
                 return solve(test_input, perm)
         return None
+
+    # --- _try_tile_shape_by_marker_count (4852f2fa) ---
+    def _try_tile_shape_by_marker_count(self, train, test_input):
+        """Find a shape of one color and count markers of another color. Tile shape N times horizontally."""
+        def solve(grid):
+            rows, cols = len(grid), len(grid[0])
+            from collections import Counter
+            cnt = Counter(v for row in grid for v in row if v != 0)
+            if len(cnt) != 2:
+                return None
+            colors = cnt.most_common()
+            shape_color = colors[0][0]
+            marker_color = colors[1][0]
+            n_markers = colors[1][1]
+            # Extract shape bbox
+            cells = [(r,c) for r in range(rows) for c in range(cols) if grid[r][c] == shape_color]
+            if not cells:
+                return None
+            mr = min(r for r,c in cells); mxr = max(r for r,c in cells)
+            mc = min(c for r,c in cells); mxc = max(c for r,c in cells)
+            sh = mxr - mr + 1; sw = mxc - mc + 1
+            shape = [[grid[mr+i][mc+j] for j in range(sw)] for i in range(sh)]
+            # Tile horizontally
+            out = [[0]*(sw*n_markers) for _ in range(sh)]
+            for t in range(n_markers):
+                for i in range(sh):
+                    for j in range(sw):
+                        out[i][t*sw+j] = shape[i][j]
+            return out
+
+        for ex in train:
+            if solve(ex['input']) != ex['output']:
+                return None
+        return solve(test_input)
+
+    # --- _try_extract_shape_with_8_marker (5117e062) ---
+    def _try_extract_shape_with_8_marker(self, train, test_input):
+        """Find the shape containing an 8. Extract bbox, replace 8 with shape's color."""
+        def solve(grid):
+            rows, cols = len(grid), len(grid[0])
+            # Find 8 positions
+            eights = [(r, c) for r in range(rows) for c in range(cols) if grid[r][c] == 8]
+            if len(eights) != 1:
+                return None
+            er, ec = eights[0]
+            # Find the shape surrounding the 8: look at 4-neighbors for non-0 non-8 color
+            shape_color = None
+            for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+                nr, nc = er+dr, ec+dc
+                if 0<=nr<rows and 0<=nc<cols and grid[nr][nc] not in (0, 8):
+                    shape_color = grid[nr][nc]
+                    break
+            if shape_color is None:
+                return None
+            # BFS to find shape cells (including 8 position)
+            visited = [[False]*cols for _ in range(rows)]
+            queue = [(er, ec)]
+            visited[er][ec] = True
+            cells = [(er, ec)]
+            while queue:
+                cr, cc = queue.pop(0)
+                for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+                    nr, nc = cr+dr, cc+dc
+                    if 0<=nr<rows and 0<=nc<cols and not visited[nr][nc] and grid[nr][nc] in (shape_color, 8):
+                        visited[nr][nc] = True
+                        queue.append((nr, nc))
+                        cells.append((nr, nc))
+            mr = min(r for r,c in cells); mxr = max(r for r,c in cells)
+            mc = min(c for r,c in cells); mxc = max(c for r,c in cells)
+            cs = set(cells)
+            out = [[0]*(mxc-mc+1) for _ in range(mxr-mr+1)]
+            for r, c in cells:
+                out[r-mr][c-mc] = shape_color
+            return out
+
+        for ex in train:
+            if solve(ex['input']) != ex['output']:
+                return None
+        return solve(test_input)
