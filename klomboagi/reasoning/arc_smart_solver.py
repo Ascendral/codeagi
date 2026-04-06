@@ -13146,3 +13146,104 @@ class SmartARCSolverV2(SmartARCSolver):
             if solve(ex['input']) != ex['output']:
                 return None
         return solve(test_input)
+
+    # --- _try_nested_rect_colors_by_size (68bc2e87) ---
+    def _try_nested_rect_colors_by_size(self, train, test_input):
+        """Nested rectangles. Output = colors peeled from outside inward."""
+        def solve(grid):
+            rows, cols = len(grid), len(grid[0])
+            from collections import Counter
+            cnt = Counter(v for row in grid for v in row)
+            bg = cnt.most_common(1)[0][0]
+            # Peel layers: find outermost non-bg, record, treat as bg, repeat
+            working = [row[:] for row in grid]
+            result = []
+            seen = {bg}
+            for _ in range(10):
+                # Find the color closest to the edges
+                best_color = None
+                best_dist = float('inf')
+                for r in range(rows):
+                    for c in range(cols):
+                        v = working[r][c]
+                        if v in seen:
+                            continue
+                        dist = min(r, rows-1-r, c, cols-1-c)
+                        if dist < best_dist or (dist == best_dist and best_color is None):
+                            best_dist = dist
+                            best_color = v
+                if best_color is None:
+                    break
+                result.append([best_color])
+                seen.add(best_color)
+            return result if result else None
+
+        for ex in train:
+            if solve(ex['input']) != ex['output']:
+                return None
+        return solve(test_input)
+
+    # --- _try_fill_frame_holes_with_patch_color (42f14c03) ---
+    def _try_fill_frame_holes_with_patch_color(self, train, test_input):
+        """Find a frame shape with holes. Find scattered patches of another color. Fill holes with patch color."""
+        def solve(grid):
+            rows, cols = len(grid), len(grid[0])
+            from collections import Counter
+            cnt = Counter(v for row in grid for v in row)
+            bg = cnt.most_common(1)[0][0]
+            # Find non-bg components
+            visited = [[False]*cols for _ in range(rows)]
+            comps = []
+            for r in range(rows):
+                for c in range(cols):
+                    if grid[r][c] != bg and not visited[r][c]:
+                        color = grid[r][c]
+                        queue = [(r, c)]; visited[r][c] = True; cells = [(r, c)]
+                        while queue:
+                            cr, cc = queue.pop(0)
+                            for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+                                nr, nc = cr+dr, cc+dc
+                                if 0<=nr<rows and 0<=nc<cols and not visited[nr][nc] and grid[nr][nc] == color:
+                                    visited[nr][nc] = True; queue.append((nr, nc)); cells.append((nr, nc))
+                        comps.append((color, cells))
+            # Find the "frame" = largest component with interior holes
+            frame = None
+            fill_color = None
+            for color, cells in comps:
+                cs = set(cells)
+                mr = min(r for r,c in cells); mxr = max(r for r,c in cells)
+                mc = min(c for r,c in cells); mxc = max(c for r,c in cells)
+                h, w = mxr-mr+1, mxc-mc+1
+                if h < 3 or w < 3:
+                    continue
+                holes = [(r,c) for r in range(mr, mxr+1) for c in range(mc, mxc+1) if (r,c) not in cs and grid[r][c] == bg]
+                if holes and len(holes) < h*w//2:
+                    frame = (color, cells, mr, mc, mxr, mxc, holes)
+                    break
+            if frame is None:
+                return None
+            frame_color, frame_cells, mr, mc, mxr, mxc, holes = frame
+            # Find fill color: non-bg, non-frame color with fewest total cells
+            from collections import defaultdict
+            color_total = defaultdict(int)
+            for color, cells in comps:
+                if color != frame_color:
+                    color_total[color] += len(cells)
+            if not color_total:
+                return None
+            fill_color = min(color_total, key=lambda c: color_total[c])
+            if fill_color is None:
+                return None
+            # Build output: frame bbox with holes filled
+            h, w = mxr-mr+1, mxc-mc+1
+            out = [[bg]*w for _ in range(h)]
+            for r, c in frame_cells:
+                out[r-mr][c-mc] = frame_color
+            for r, c in holes:
+                out[r-mr][c-mc] = fill_color
+            return out
+
+        for ex in train:
+            if solve(ex['input']) != ex['output']:
+                return None
+        return solve(test_input)
