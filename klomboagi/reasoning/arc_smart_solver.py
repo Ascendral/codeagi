@@ -582,6 +582,7 @@ class SmartARCSolverV2(SmartARCSolver):
             self._try_extract_shape_with_8_marker,
             self._try_merge_complementary_shapes,
             self._try_grid_cell_marker_count_threshold,
+            self._try_most_common_cross_arm_color,
         ]
         for s in v2:
             try:
@@ -13114,3 +13115,34 @@ class SmartARCSolverV2(SmartARCSolver):
                     if ok:
                         return solve(test_input, sep_color, marker_color, threshold)
         return None
+
+    # --- _try_most_common_cross_arm_color (642d658d) ---
+    def _try_most_common_cross_arm_color(self, train, test_input):
+        """Find plus-crosses with center=4. Count arm colors. Output = 1x1 of most common arm color."""
+        def solve(grid):
+            rows, cols = len(grid), len(grid[0])
+            from collections import Counter
+            arm_colors = Counter()
+            for r in range(1, rows-1):
+                for c in range(1, cols-1):
+                    if grid[r][c] == 4:
+                        arms = [grid[r-1][c], grid[r+1][c], grid[r][c-1], grid[r][c+1]]
+                        arm_set = set(arms)
+                        arm_set.discard(0)
+                        # Find the non-bg arm colors
+                        bg_colors = set()
+                        for row in grid:
+                            for v in row:
+                                bg_colors.add(v)
+                        # All 4 arms same non-4 color?
+                        non4 = [a for a in arms if a != 4 and a != 0]
+                        if len(non4) == 4 and len(set(non4)) == 1:
+                            arm_colors[non4[0]] += 1
+            if not arm_colors:
+                return None
+            return [[arm_colors.most_common(1)[0][0]]]
+
+        for ex in train:
+            if solve(ex['input']) != ex['output']:
+                return None
+        return solve(test_input)
