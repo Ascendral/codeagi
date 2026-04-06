@@ -574,6 +574,7 @@ class SmartARCSolverV2(SmartARCSolver):
             self._try_overlay_bordered_rect_interiors,
             self._try_xor_halves,
             self._try_shape_colored_by_key_columns,
+            self._try_rect_count_staircase,
         ]
         for s in v2:
             try:
@@ -12698,6 +12699,50 @@ class SmartARCSolverV2(SmartARCSolver):
             for i in range(sh):
                 for j in range(sw):
                     out[i][j] = col_colors[j] if shape[i][j] else sep_color
+            return out
+
+        for ex in train:
+            if solve(ex['input']) != ex['output']:
+                return None
+        return solve(test_input)
+
+    # --- _try_rect_count_staircase (2753e76c) ---
+    def _try_rect_count_staircase(self, train, test_input):
+        """Count solid rectangles per color. Output staircase sorted by count descending, right-justified."""
+        def solve(grid):
+            rows, cols = len(grid), len(grid[0])
+            from collections import Counter
+            visited = [[False]*cols for _ in range(rows)]
+            rect_counts = Counter()
+            for r in range(rows):
+                for c in range(cols):
+                    if grid[r][c] != 0 and not visited[r][c]:
+                        color = grid[r][c]
+                        queue = [(r, c)]
+                        visited[r][c] = True
+                        cells = [(r, c)]
+                        while queue:
+                            cr, cc = queue.pop(0)
+                            for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+                                nr, nc = cr+dr, cc+dc
+                                if 0<=nr<rows and 0<=nc<cols and not visited[nr][nc] and grid[nr][nc] == color:
+                                    visited[nr][nc] = True
+                                    queue.append((nr, nc))
+                                    cells.append((nr, nc))
+                        # Check if this component is a solid rectangle
+                        mr = min(rr for rr,cc in cells); mxr = max(rr for rr,cc in cells)
+                        mc = min(cc for rr,cc in cells); mxc = max(cc for rr,cc in cells)
+                        if len(cells) == (mxr-mr+1)*(mxc-mc+1):
+                            rect_counts[color] += 1
+            if not rect_counts:
+                return None
+            sorted_colors = sorted(rect_counts.items(), key=lambda x: -x[1])
+            n = len(sorted_colors)
+            max_count = sorted_colors[0][1]
+            out = [[0]*max_count for _ in range(n)]
+            for i, (color, count) in enumerate(sorted_colors):
+                for j in range(max_count - count, max_count):
+                    out[i][j] = color
             return out
 
         for ex in train:
