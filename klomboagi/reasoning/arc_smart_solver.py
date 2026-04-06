@@ -12835,3 +12835,46 @@ class SmartARCSolverV2(SmartARCSolver):
             if solve(ex['input']) != ex['output']:
                 return None
         return solve(test_input)
+
+    # --- _try_complete_symmetry_with_2 (1b60fb0c) ---
+    def _try_complete_symmetry_with_2(self, train, test_input):
+        """1-shape has partial symmetry. Reflect to complete it; new cells become color 2."""
+        def solve(grid):
+            rows, cols = len(grid), len(grid[0])
+            ones = [(r,c) for r in range(rows) for c in range(cols) if grid[r][c] == 1]
+            if not ones:
+                return None
+            mr = min(r for r,c in ones); mxr = max(r for r,c in ones)
+            mc = min(c for r,c in ones); mxc = max(c for r,c in ones)
+            one_set = set(ones)
+            out = [row[:] for row in grid]
+            # Try vertical axis (reflect left<->right)
+            for axis_c2 in [mc + mxc]:  # axis at (mc+mxc)/2
+                new_cells = []
+                for r, c in ones:
+                    rc = mc + mxc - c  # reflect c around axis
+                    if (r, rc) not in one_set and 0 <= rc < cols and grid[r][rc] == 0:
+                        new_cells.append((r, rc))
+                if new_cells:
+                    test_out = [row[:] for row in grid]
+                    for r, c in new_cells:
+                        test_out[r][c] = 2
+                    return test_out
+            # Try horizontal axis
+            for axis_r2 in [mr + mxr]:
+                new_cells = []
+                for r, c in ones:
+                    rr = mr + mxr - r
+                    if (rr, c) not in one_set and 0 <= rr < rows and grid[rr][c] == 0:
+                        new_cells.append((rr, c))
+                if new_cells:
+                    test_out = [row[:] for row in grid]
+                    for r, c in new_cells:
+                        test_out[r][c] = 2
+                    return test_out
+            return None
+
+        for ex in train:
+            if solve(ex['input']) != ex['output']:
+                return None
+        return solve(test_input)
