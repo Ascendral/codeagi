@@ -577,6 +577,7 @@ class SmartARCSolverV2(SmartARCSolver):
             self._try_rect_count_staircase,
             self._try_patch_into_5rect_hole,
             self._try_stack_3_panels_priority,
+            self._try_stack_4_panels_priority,
         ]
         for s in v2:
             try:
@@ -12901,6 +12902,34 @@ class SmartARCSolverV2(SmartARCSolver):
 
         # Try all 6 permutations of priority order
         for perm in permutations([0, 1, 2]):
+            ok = True
+            for ex in train:
+                if solve(ex['input'], perm) != ex['output']:
+                    ok = False; break
+            if ok:
+                return solve(test_input, perm)
+        return None
+
+    # --- _try_stack_4_panels_priority (3d31c5b3) ---
+    def _try_stack_4_panels_priority(self, train, test_input):
+        """4 equal panels stacked vertically. Output = pixel from highest-priority non-zero panel."""
+        from itertools import permutations
+        def solve(grid, perm):
+            rows, cols = len(grid), len(grid[0])
+            if rows % 4 != 0:
+                return None
+            ph = rows // 4
+            panels = [grid[i*ph:(i+1)*ph] for i in range(4)]
+            out = [[0]*cols for _ in range(ph)]
+            for r in range(ph):
+                for c in range(cols):
+                    for pi in perm:
+                        if panels[pi][r][c] != 0:
+                            out[r][c] = panels[pi][r][c]
+                            break
+            return out
+
+        for perm in permutations([0, 1, 2, 3]):
             ok = True
             for ex in train:
                 if solve(ex['input'], perm) != ex['output']:
