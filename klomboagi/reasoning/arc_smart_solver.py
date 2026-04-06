@@ -575,6 +575,7 @@ class SmartARCSolverV2(SmartARCSolver):
             self._try_xor_halves,
             self._try_shape_colored_by_key_columns,
             self._try_rect_count_staircase,
+            self._try_patch_into_5rect_hole,
         ]
         for s in v2:
             try:
@@ -12743,6 +12744,91 @@ class SmartARCSolverV2(SmartARCSolver):
             for i, (color, count) in enumerate(sorted_colors):
                 for j in range(max_count - count, max_count):
                     out[i][j] = color
+            return out
+
+        for ex in train:
+            if solve(ex['input']) != ex['output']:
+                return None
+        return solve(test_input)
+
+    # --- _try_patch_into_5rect_hole (228f6490) ---
+    def _try_patch_into_5rect_hole(self, train, test_input):
+        """Small colored patches move into the 0-holes of 5-bordered rectangles, matched by shape."""
+        def solve(grid):
+            rows, cols = len(grid), len(grid[0])
+            # Find 5-bordered rectangles
+            visited = [[False]*cols for _ in range(rows)]
+            rects = []
+            for r in range(rows):
+                for c in range(cols):
+                    if grid[r][c] == 5 and not visited[r][c]:
+                        queue = [(r, c)]; visited[r][c] = True; cells = [(r, c)]
+                        while queue:
+                            cr, cc = queue.pop(0)
+                            for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+                                nr, nc = cr+dr, cc+dc
+                                if 0<=nr<rows and 0<=nc<cols and not visited[nr][nc] and grid[nr][nc] == 5:
+                                    visited[nr][nc] = True; queue.append((nr, nc)); cells.append((nr, nc))
+                        rects.append(cells)
+            # Find holes in each rect (interior 0-cells)
+            rect_holes = []
+            for cells in rects:
+                cs = set(cells)
+                mr = min(r for r,c in cells); mxr = max(r for r,c in cells)
+                mc = min(c for r,c in cells); mxc = max(c for r,c in cells)
+                hole = []
+                for r in range(mr, mxr+1):
+                    for c in range(mc, mxc+1):
+                        if (r, c) not in cs and grid[r][c] == 0:
+                            hole.append((r, c))
+                if hole:
+                    rect_holes.append(hole)
+            # Find colored patches (non-5 non-0)
+            visited2 = [[False]*cols for _ in range(rows)]
+            patches = []
+            for r in range(rows):
+                for c in range(cols):
+                    v = grid[r][c]
+                    if v != 0 and v != 5 and not visited2[r][c]:
+                        queue = [(r, c)]; visited2[r][c] = True; cells = [(r, c)]; color = v
+                        while queue:
+                            cr, cc = queue.pop(0)
+                            for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+                                nr, nc = cr+dr, cc+dc
+                                if 0<=nr<rows and 0<=nc<cols and not visited2[nr][nc] and grid[nr][nc] == color:
+                                    visited2[nr][nc] = True; queue.append((nr, nc)); cells.append((nr, nc))
+                        patches.append((color, cells))
+            # Normalize shape: relative to bbox
+            def normalize(cells):
+                mr = min(r for r,c in cells); mc = min(c for r,c in cells)
+                return frozenset((r-mr, c-mc) for r,c in cells)
+            # Match patches to holes by shape
+            out = [row[:] for row in grid]
+            # Match by shape AND proximity (closest pair first)
+            def center(cells):
+                return (sum(r for r,c in cells)/len(cells), sum(c for r,c in cells)/len(cells))
+            matches = []
+            for pi, (color, pcells) in enumerate(patches):
+                pshape = normalize(pcells)
+                pc = center(pcells)
+                for hi, hole in enumerate(rect_holes):
+                    hshape = normalize(hole)
+                    if pshape == hshape:
+                        hc = center(hole)
+                        dist = abs(pc[0]-hc[0]) + abs(pc[1]-hc[1])
+                        matches.append((dist, pi, hi))
+            matches.sort()
+            used_patches = set(); used_holes = set()
+            for _, pi, hi in matches:
+                if pi in used_patches or hi in used_holes:
+                    continue
+                color, pcells = patches[pi]
+                hole = rect_holes[hi]
+                for r, c in hole:
+                    out[r][c] = color
+                for r, c in pcells:
+                    out[r][c] = 0
+                used_patches.add(pi); used_holes.add(hi)
             return out
 
         for ex in train:
