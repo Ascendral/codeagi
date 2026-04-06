@@ -581,6 +581,7 @@ class SmartARCSolverV2(SmartARCSolver):
             self._try_tile_shape_by_marker_count,
             self._try_extract_shape_with_8_marker,
             self._try_merge_complementary_shapes,
+            self._try_grid_cell_marker_count_threshold,
         ]
         for s in v2:
             try:
@@ -13074,3 +13075,42 @@ class SmartARCSolverV2(SmartARCSolver):
             if solve(ex['input']) != ex['output']:
                 return None
         return solve(test_input)
+
+    # --- _try_grid_cell_marker_count_threshold (6773b310) ---
+    def _try_grid_cell_marker_count_threshold(self, train, test_input):
+        """Grid divided by separator lines into NxN cells. Count markers per cell. Output 1 if count >= threshold."""
+        def solve(grid, sep_color, marker_color, threshold):
+            rows, cols = len(grid), len(grid[0])
+            # Find separator rows and cols
+            sep_rows = [r for r in range(rows) if all(grid[r][c] == sep_color for c in range(cols))]
+            sep_cols = [c for c in range(cols) if all(grid[r][c] == sep_color for r in range(rows))]
+            if not sep_rows or not sep_cols:
+                return None
+            # Build cell boundaries
+            row_bounds = [-1] + sep_rows + [rows]
+            col_bounds = [-1] + sep_cols + [cols]
+            nr = len(row_bounds) - 1
+            nc = len(col_bounds) - 1
+            out = [[0]*nc for _ in range(nr)]
+            for ri in range(nr):
+                for ci in range(nc):
+                    r1, r2 = row_bounds[ri]+1, row_bounds[ri+1]
+                    c1, c2 = col_bounds[ci]+1, col_bounds[ci+1]
+                    count = sum(1 for r in range(r1, r2) for c in range(c1, c2) if grid[r][c] == marker_color)
+                    out[ri][ci] = 1 if count >= threshold else 0
+            return out
+
+        # Learn parameters from training
+        for sep_color in range(10):
+            for marker_color in range(10):
+                if sep_color == marker_color:
+                    continue
+                for threshold in [2, 3, 1]:
+                    ok = True
+                    for ex in train:
+                        r = solve(ex['input'], sep_color, marker_color, threshold)
+                        if r != ex['output']:
+                            ok = False; break
+                    if ok:
+                        return solve(test_input, sep_color, marker_color, threshold)
+        return None
