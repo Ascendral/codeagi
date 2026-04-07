@@ -1,0 +1,14 @@
+---
+description: Model preference order for this repo
+alwaysApply: true
+---
+
+# Model preference
+
+When the user can choose or override the model:
+
+1. **Primary:** OpenAI **GPT-5.4** (or the user’s configured OpenAI “head” / flagship equivalent) for planning, architecture, debugging, and any claim that needs verification.
+2. **Then:** Other available models in the session, in descending capability as the user lists them.
+3. **Last:** **Composer** / lighter agent models — use for small, mechanical edits only after the primary model has set direction, or when the user explicitly asks for a quick pass.
+
+If GPT-5.4 is unavailable, state that limitation and proceed with the best available model without pretending it is GPT-5.4.
