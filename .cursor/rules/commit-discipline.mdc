@@ -1,0 +1,12 @@
+---
+description: Commit discipline and verification hygiene
+alwaysApply: true
+---
+
+# Commit Discipline
+
+- Use tagged commit messages like `[FIX]`, `[LEARN]`, `[DOCS]`, `[TEST]`, `[INFRA]`.
+- Keep one concern per commit.
+- Run the repo verification command before committing when configured.
+- Do not introduce repo-defined forbidden patterns.
+- If a commit changes a benchmark or score, include the measured number in the message.

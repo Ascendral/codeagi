@@ -13,3 +13,7 @@ build/
 .venv/
 venv/
 brain_core/target/
+
+# Local runtime state (not part of source)
+long-term/
+runtime/

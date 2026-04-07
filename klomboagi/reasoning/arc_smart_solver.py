@@ -80,6 +80,12 @@ class SmartARCSolver(ARCSolverV18):
             if sname in ['_try_identity', '_try_position_transform']:
                 score += 15
 
+            # Learned score boost from prior experience
+            learned = getattr(self, '_learned_scores', {})
+            learned_key = f"phase1:{sname}"
+            if learned_key in learned:
+                score += min(learned[learned_key] * 10, 8)  # Cap at 8
+
             scored.append((score, sname, sfn))
 
         scored.sort(key=lambda x: -x[0])
@@ -89,6 +95,7 @@ class SmartARCSolver(ARCSolverV18):
                 result = sfn(train, test_input)
                 if result is not None:
                     if self._cross_validate(sfn, train):
+                        self._last_strategy = f"phase1:{sname}"
                         return result
             except:
                 continue
@@ -169,11 +176,14 @@ class SmartARCSolverV2(SmartARCSolver):
             return None
 
     def solve(self, train, test_input):
+        self._last_strategy = None
+
         # ── Pre-phase lookup strategies (self-validating, skip CV) ──
         for lookup_fn in [self._try_key_shape_recolors_main, self._try_block_pattern_lookup]:
             try:
                 result = lookup_fn(train, test_input)
                 if result is not None:
+                    self._last_strategy = f"pre_lookup:{lookup_fn.__name__}"
                     return result
             except Exception:
                 continue
@@ -193,6 +203,7 @@ class SmartARCSolverV2(SmartARCSolver):
                 result = pre_fn(train, test_input)
                 if result is not None:
                     if self._cross_validate(pre_fn, train):
+                        self._last_strategy = f"pre_v2:{pre_fn.__name__}"
                         return result
             except Exception:
                 continue
@@ -214,11 +225,13 @@ class SmartARCSolverV2(SmartARCSolver):
                        learn_ushape_gap_drop, learn_template_stamp_at_marker]:
             result = SmartARCSolverV2._try_learner(p0_fn, train, test_input, loo=True)
             if result is not None:
+                self._last_strategy = f"phase0:{p0_fn.__name__}"
                 return result
 
         # ── Phase 1: 106 hand-coded strategies (cross-validated) ──────────────
         result = super().solve(train, test_input)
         if result is not None:
+            # _last_strategy set by SmartARCSolver.solve() below
             return result
 
         # ── Phase 2: Learned rule families (LOO validated) ────────────────────
@@ -301,6 +314,7 @@ class SmartARCSolverV2(SmartARCSolver):
         for learn_fn, loo in extra_learners:
             result = self._try_learner(learn_fn, train, test_input, loo=loo)
             if result is not None:
+                self._last_strategy = f"phase2_extra:{learn_fn.__name__}"
                 return result
 
         # Try classifier-ordered families
@@ -308,12 +322,14 @@ class SmartARCSolverV2(SmartARCSolver):
             learn_fn, loo = family_learner_map[family]
             result = self._try_learner(learn_fn, train, test_input, loo=loo)
             if result is not None:
+                self._last_strategy = f"phase2:{family}"
                 return result
 
         # DSL program synthesis (composable primitives, depth 1-3)
         from klomboagi.reasoning.arc_dsl_v2 import synthesize
         synth_result = synthesize(train, test_input, max_depth=3, timeout_ms=2000)
         if synth_result is not None:
+            self._last_strategy = "dsl"
             return synth_result
 
         # ── Phase 2b: Object-level compositional solver ──────────────────────
@@ -322,6 +338,7 @@ class SmartARCSolverV2(SmartARCSolver):
             obj_solver = CompositionalObjectSolver()
             obj_result = obj_solver.solve(train, test_input)
             if obj_result is not None:
+                self._last_strategy = "object_solver"
                 return obj_result
         except Exception:
             pass
@@ -332,6 +349,7 @@ class SmartARCSolverV2(SmartARCSolver):
             reasoner = ARCReasoner()
             reason_result = reasoner.solve(train, test_input)
             if reason_result is not None:
+                self._last_strategy = "reasoner"
                 return reason_result
         except Exception:
             pass
@@ -588,6 +606,7 @@ class SmartARCSolverV2(SmartARCSolver):
             try:
                 r = s(train, test_input)
                 if r is not None and self._cross_validate(s, train):
+                    self._last_strategy = f"phase3:{s.__name__}"
                     return r
             except:
                 continue
@@ -597,6 +616,7 @@ class SmartARCSolverV2(SmartARCSolver):
             try:
                 r = s(train, test_input)
                 if r is not None:
+                    self._last_strategy = f"phase3_lookup:{s.__name__}"
                     return r
             except:
                 pass
@@ -605,6 +625,7 @@ class SmartARCSolverV2(SmartARCSolver):
         from klomboagi.reasoning.arc_llm_solver import solve_with_llm
         llm_result = solve_with_llm(train, test_input, max_attempts=5)
         if llm_result is not None:
+            self._last_strategy = "llm"
             return llm_result
 
         # ── Phase 5: Disabled — unvalidated fallback produces too many wrong

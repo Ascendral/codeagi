@@ -1,0 +1,13 @@
+---
+description: Anti-theater rules for all work
+alwaysApply: true
+---
+
+# Anti-Theater
+
+- Do not solve the user's core problem directly and call it "the system."
+- Do not claim progress from inspection alone.
+- Do not point to a file as evidence without naming the entry path that uses it.
+- If the easy path fakes progress and the hard path serves the goal, stop and ask.
+- If you cannot verify a claim, say `I don't know` or `it didn't work`.
+- If the repo has a verification command, run it before saying `working`, `fixed`, `wired`, or `learned`.
