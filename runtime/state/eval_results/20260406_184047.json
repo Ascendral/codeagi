@@ -1,0 +1,291 @@
+{
+  "timestamp": "20260406_184047",
+  "total": 20,
+  "correct": 15,
+  "accuracy": 0.75,
+  "used_learning": true,
+  "learning_influence": 19,
+  "total_time_s": 20.2,
+  "results": [
+    {
+      "task_id": "00576224",
+      "correct": true,
+      "strategy_used": "phase1:_try_row_tile_mirror_tile",
+      "time_ms": 3.2,
+      "input_shape": [
+        2,
+        2
+      ],
+      "output_shape": [
+        6,
+        6
+      ]
+    },
+    {
+      "task_id": "007bbfb7",
+      "correct": true,
+      "strategy_used": "phase1:_try_fractal_mark_tile",
+      "time_ms": 1.7,
+      "input_shape": [
+        3,
+        3
+      ],
+      "output_shape": [
+        9,
+        9
+      ]
+    },
+    {
+      "task_id": "009d5c81",
+      "correct": true,
+      "strategy_used": "pre_lookup:_try_key_shape_recolors_main",
+      "time_ms": 0.3,
+      "input_shape": [
+        14,
+        14
+      ],
+      "output_shape": [
+        14,
+        14
+      ]
+    },
+    {
+      "task_id": "00d62c1b",
+      "correct": true,
+      "strategy_used": "phase1:_try_mask_overlay",
+      "time_ms": 19.4,
+      "input_shape": [
+        20,
+        20
+      ],
+      "output_shape": [
+        20,
+        20
+      ]
+    },
+    {
+      "task_id": "00dbd492",
+      "correct": true,
+      "strategy_used": "phase2:region",
+      "time_ms": 175.0,
+      "input_shape": [
+        20,
+        20
+      ],
+      "output_shape": [
+        20,
+        20
+      ]
+    },
+    {
+      "task_id": "017c7c7b",
+      "correct": true,
+      "strategy_used": "phase1:_try_tile_pattern_extend_recolor",
+      "time_ms": 4.0,
+      "input_shape": [
+        6,
+        3
+      ],
+      "output_shape": [
+        9,
+        3
+      ]
+    },
+    {
+      "task_id": "025d127b",
+      "correct": true,
+      "strategy_used": "phase1:_try_shift_parallelogram_top",
+      "time_ms": 18.9,
+      "input_shape": [
+        10,
+        10
+      ],
+      "output_shape": [
+        10,
+        10
+      ]
+    },
+    {
+      "task_id": "03560426",
+      "correct": true,
+      "strategy_used": "phase2:advanced",
+      "time_ms": 53.6,
+      "input_shape": [
+        10,
+        10
+      ],
+      "output_shape": [
+        10,
+        10
+      ]
+    },
+    {
+      "task_id": "045e512c",
+      "correct": false,
+      "strategy_used": "",
+      "time_ms": 3078.3,
+      "input_shape": [
+        21,
+        21
+      ],
+      "output_shape": [
+        21,
+        21
+      ]
+    },
+    {
+      "task_id": "0520fde7",
+      "correct": true,
+      "strategy_used": "phase1:_try_and_halves_sep",
+      "time_ms": 1.0,
+      "input_shape": [
+        3,
+        7
+      ],
+      "output_shape": [
+        3,
+        3
+      ]
+    },
+    {
+      "task_id": "05269061",
+      "correct": true,
+      "strategy_used": "phase2:ranking",
+      "time_ms": 14.4,
+      "input_shape": [
+        7,
+        7
+      ],
+      "output_shape": [
+        7,
+        7
+      ]
+    },
+    {
+      "task_id": "05a7bcf2",
+      "correct": false,
+      "strategy_used": "",
+      "time_ms": 7189.4,
+      "input_shape": [
+        30,
+        30
+      ],
+      "output_shape": [
+        30,
+        30
+      ]
+    },
+    {
+      "task_id": "05f2a901",
+      "correct": true,
+      "strategy_used": "phase1:_try_slide_object_to_anchor",
+      "time_ms": 26.5,
+      "input_shape": [
+        11,
+        10
+      ],
+      "output_shape": [
+        11,
+        10
+      ]
+    },
+    {
+      "task_id": "0607ce86",
+      "correct": false,
+      "strategy_used": "",
+      "time_ms": 3634.1,
+      "input_shape": [
+        24,
+        22
+      ],
+      "output_shape": [
+        24,
+        22
+      ]
+    },
+    {
+      "task_id": "0692e18c",
+      "correct": true,
+      "strategy_used": "phase2:tiling",
+      "time_ms": 3.4,
+      "input_shape": [
+        3,
+        3
+      ],
+      "output_shape": [
+        9,
+        9
+      ]
+    },
+    {
+      "task_id": "06df4c85",
+      "correct": false,
+      "strategy_used": "",
+      "time_ms": 4300.3,
+      "input_shape": [
+        26,
+        26
+      ],
+      "output_shape": [
+        26,
+        26
+      ]
+    },
+    {
+      "task_id": "070dd51e",
+      "correct": true,
+      "strategy_used": "phase1:_try_flood_fill_between_pairs",
+      "time_ms": 83.7,
+      "input_shape": [
+        20,
+        20
+      ],
+      "output_shape": [
+        20,
+        20
+      ]
+    },
+    {
+      "task_id": "08ed6ac7",
+      "correct": true,
+      "strategy_used": "phase2:ranking",
+      "time_ms": 24.2,
+      "input_shape": [
+        9,
+        9
+      ],
+      "output_shape": [
+        9,
+        9
+      ]
+    },
+    {
+      "task_id": "09629e4f",
+      "correct": false,
+      "strategy_used": "",
+      "time_ms": 1459.4,
+      "input_shape": [
+        11,
+        11
+      ],
+      "output_shape": [
+        11,
+        11
+      ]
+    },
+    {
+      "task_id": "0962bcdd",
+      "correct": true,
+      "strategy_used": "phase2:advanced",
+      "time_ms": 80.9,
+      "input_shape": [
+        12,
+        12
+      ],
+      "output_shape": [
+        12,
+        12
+      ]
+    }
+  ]
+}

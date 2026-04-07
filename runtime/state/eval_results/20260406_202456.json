@@ -1,0 +1,81 @@
+{
+  "timestamp": "20260406_202456",
+  "total": 5,
+  "correct": 5,
+  "accuracy": 1.0,
+  "used_learning": true,
+  "learning_influence": 4,
+  "total_time_s": 1.0,
+  "results": [
+    {
+      "task_id": "00576224",
+      "correct": true,
+      "strategy_used": "phase1:_try_row_tile_mirror_tile",
+      "time_ms": 3.9,
+      "input_shape": [
+        2,
+        2
+      ],
+      "output_shape": [
+        6,
+        6
+      ]
+    },
+    {
+      "task_id": "007bbfb7",
+      "correct": true,
+      "strategy_used": "phase1:_try_fractal_mark_tile",
+      "time_ms": 1.4,
+      "input_shape": [
+        3,
+        3
+      ],
+      "output_shape": [
+        9,
+        9
+      ]
+    },
+    {
+      "task_id": "009d5c81",
+      "correct": true,
+      "strategy_used": "pre_lookup:_try_key_shape_recolors_main",
+      "time_ms": 0.2,
+      "input_shape": [
+        14,
+        14
+      ],
+      "output_shape": [
+        14,
+        14
+      ]
+    },
+    {
+      "task_id": "00d62c1b",
+      "correct": true,
+      "strategy_used": "phase1:_try_mask_overlay",
+      "time_ms": 15.6,
+      "input_shape": [
+        20,
+        20
+      ],
+      "output_shape": [
+        20,
+        20
+      ]
+    },
+    {
+      "task_id": "00dbd492",
+      "correct": true,
+      "strategy_used": "phase2:region",
+      "time_ms": 929.6,
+      "input_shape": [
+        20,
+        20
+      ],
+      "output_shape": [
+        20,
+        20
+      ]
+    }
+  ]
+}

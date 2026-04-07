@@ -1,0 +1,32 @@
+{
+  "episodic.events": {
+    "key": "episodic.events",
+    "path": "/Users/zanderone/KlomboAGI/long-term/memory/episodic/events.jsonl",
+    "sha256": "6b326806d83dcb4a7595095e70c6f1f2cba35aa917824695068bb62a3dd166a3",
+    "updated_at": "2026-04-02T01:53:30.939687+00:00"
+  },
+  "runtime.world_state": {
+    "key": "runtime.world_state",
+    "path": "/Users/zanderone/KlomboAGI/runtime/state/world_state.json",
+    "sha256": "fbe0d2469d1cd376d2607747952efdd130677fb941a2c6efcb33b36547ee08dc",
+    "updated_at": "2026-04-02T01:53:30.939079+00:00"
+  },
+  "world.entities": {
+    "key": "world.entities",
+    "path": "/Users/zanderone/KlomboAGI/long-term/world/entities/active.json",
+    "sha256": "2adcf1d9bb0f98f63a810167490ae3712745d2e89e319f8c8c4ebb36635bf320",
+    "updated_at": "2026-04-02T01:53:30.937951+00:00"
+  },
+  "world.relations": {
+    "key": "world.relations",
+    "path": "/Users/zanderone/KlomboAGI/long-term/world/relations/active.json",
+    "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "updated_at": "2026-04-02T01:53:30.938357+00:00"
+  },
+  "world.snapshots": {
+    "key": "world.snapshots",
+    "path": "/Users/zanderone/KlomboAGI/long-term/world/snapshots/history.json",
+    "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "updated_at": "2026-04-02T01:53:30.938722+00:00"
+  }
+}

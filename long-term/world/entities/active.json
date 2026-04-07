@@ -1,0 +1,12 @@
+{
+  "runtime": {
+    "attributes": {
+      "active_mission_id": null
+    },
+    "id": "runtime",
+    "name": "KlomboAGI Runtime",
+    "status": "initialized",
+    "type": "runtime",
+    "updated_at": "2026-04-02T01:53:30.937141+00:00"
+  }
+}

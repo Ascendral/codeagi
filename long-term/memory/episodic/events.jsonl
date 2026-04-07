@@ -1,0 +1,2 @@
+{"event_type": "world.initialized", "payload": {"active_mission_id": null, "entity_count": 1, "initialized_at": "2026-04-02T01:53:30.937141+00:00", "notes": [], "relation_count": 0, "snapshot_count": 0}, "timestamp": "2026-04-02T01:53:30.939223+00:00"}
+{"event_type": "runtime.initialized", "payload": {"initialized_at": "2026-04-02T01:53:30.937141+00:00"}, "timestamp": "2026-04-02T01:53:30.939561+00:00"}
