@@ -1,0 +1,17 @@
+---
+description: Require measurement before success claims
+alwaysApply: true
+---
+
+# Proof Before Claims
+
+Before claiming a change works:
+- state what is being measured
+- show the baseline
+- show the result after the change
+- name the command or test used
+- mention if verification was not run
+
+Never grade your own work from code reading alone.
+
+For claims like `learning`, `performance`, `wiring`, or `autonomy`, include the mechanism and the observed effect.

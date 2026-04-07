@@ -1,0 +1,22 @@
+{
+  "requireCommitTags": true,
+  "allowedCommitTags": [
+    "FIX",
+    "REFACTOR",
+    "LEARN",
+    "EVAL",
+    "INFRA",
+    "DOCS",
+    "TEST",
+    "SECURITY",
+    "SOLVE"
+  ],
+  "scoreRequiredTags": [
+    "SOLVE"
+  ],
+  "requireVerificationCommand": true,
+  "verificationCommand": "./verify.sh --quick",
+  "forbiddenAddedPatterns": [
+    "^\\s*def _try_"
+  ]
+}

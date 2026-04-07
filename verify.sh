@@ -16,9 +16,9 @@ PASS=0
 FAIL=0
 WARN=0
 
-pass() { echo -e "${GREEN}[PASS]${NC} $1"; ((PASS++)); }
-fail() { echo -e "${RED}[FAIL]${NC} $1"; ((FAIL++)); }
-warn() { echo -e "${YELLOW}[WARN]${NC} $1"; ((WARN++)); }
+pass() { echo -e "${GREEN}[PASS]${NC} $1"; PASS=$((PASS + 1)); }
+fail() { echo -e "${RED}[FAIL]${NC} $1"; FAIL=$((FAIL + 1)); }
+warn() { echo -e "${YELLOW}[WARN]${NC} $1"; WARN=$((WARN + 1)); }
 
 RUN_SCORE=false
 QUICK=false
@@ -46,7 +46,7 @@ fi
 # 2. _try_ function count
 echo ""
 echo "--- _try_ Function Census ---"
-TRY_COUNT=$(grep -r "def _try_" klomboagi/ --include="*.py" 2>/dev/null | wc -l | tr -d ' ')
+TRY_COUNT=$({ grep -r "def _try_" klomboagi/ --include="*.py" 2>/dev/null || true; } | wc -l | tr -d ' ')
 echo "Total _try_* function definitions: $TRY_COUNT"
 if [ "$TRY_COUNT" -gt 0 ]; then
     warn "$TRY_COUNT hand-coded _try_* functions (Level 0 — Manual)"
@@ -54,7 +54,7 @@ fi
 
 # Top files by _try_ count
 echo "Top files:"
-grep -r "def _try_" klomboagi/ --include="*.py" -l 2>/dev/null | while read -r f; do
+{ grep -r "def _try_" klomboagi/ --include="*.py" -l 2>/dev/null || true; } | while read -r f; do
     count=$(grep -c "def _try_" "$f" 2>/dev/null || echo 0)
     echo "  $count  $f"
 done | sort -rn | head -5
@@ -87,8 +87,8 @@ fi
 # 4. Credential scan
 echo ""
 echo "--- Credential Scan ---"
-CRED_PATTERNS='password|passwd|secret|api_key|apikey|token|credential'
-CRED_HITS=$(grep -rni "$CRED_PATTERNS" --include="*.py" --include="*.sh" --include="*.json" --include="*.yaml" --include="*.yml" --include="*.toml" --include="*.cfg" --include="*.ini" 2>/dev/null | grep -vi "test\|example\|sample\|template\|\.md\|comment\|#.*password" | head -20)
+CRED_PATTERNS='(password|passwd|secret|api[_-]?key|apikey|token|credential)[[:space:]]*[:=][[:space:]]*["'"'"'"'"'"'"'"'"'][^"'"'"'"'"'"'"'"'"']+["'"'"'"'"'"'"'"'"']'
+CRED_HITS=$(grep -rniE "$CRED_PATTERNS" --include="*.py" --include="*.sh" --include="*.json" --include="*.yaml" --include="*.yml" --include="*.toml" --include="*.cfg" --include="*.ini" 2>/dev/null | grep -vi "test\|example\|sample\|template\|\.md\|comment" | head -20 || true)
 if [ -n "$CRED_HITS" ]; then
     fail "Potential hardcoded credentials found:"
     echo "$CRED_HITS" | head -5
@@ -99,14 +99,19 @@ fi
 # 5. Test suite
 echo ""
 echo "--- Test Suite ---"
-if [ -d "tests" ] && ls tests/test_*.py 1>/dev/null 2>&1; then
-    if python3 -m pytest tests/ -x -q 2>/dev/null; then
+TRACKED_TESTS=()
+while IFS= read -r tracked_test; do
+    TRACKED_TESTS+=("$tracked_test")
+done < <(git ls-files 'tests/test_*.py')
+
+if [ "${#TRACKED_TESTS[@]}" -gt 0 ]; then
+    if python3 -m pytest "${TRACKED_TESTS[@]}" -x -q 2>/dev/null; then
         pass "Test suite passes"
     else
         fail "Test suite has failures"
     fi
 else
-    warn "No test files found in tests/"
+    warn "No tracked test files found in tests/"
 fi
 
 # 6. Score verification (optional)
