@@ -1,160 +1,104 @@
-# ARCHITECTURE.md
+# ARCHITECTURE.md — System State of Truth
 
-## Purpose
+Last audited: 2026-04-06
 
-KlomboAGI is an experimental autonomous cognition system.
+## What KlomboAGI Actually Is (Right Now)
 
-Its purpose is to test whether a software agent can become more capable over time through:
-- persistent state
-- world modeling
-- planning
-- verification
-- learning
-- transfer
+An ARC-AGI-1 solver built on hand-coded pattern-matching strategies.
+Not yet a learning system. Not yet autonomous. That's the goal, not the current state.
 
-This architecture exists to support measurable progress in those areas.
-It does not assume AGI.
-It does not assume one model call is intelligence.
+## What's Live and Running
 
-## Design Principles
+### `klomboagi/reasoning/arc_smart_solver.py`
+- **The main solver.** 636 `_try_*` functions (pattern-specific solvers).
+- Currently at ~341/1000 ARC-AGI-1 tasks (34.1%).
+- This is the workhorse. Every score improvement comes from here.
 
-1. State over session history
-2. Cognition over generation
-3. Verification before trust
-4. Memory must affect behavior
-5. Learning must be measurable
-6. Modularity over magic
+### `klomboagi/reasoning/arc_solver.py`
+- Base solver, 251 `_try_*` references. Used by smart_solver.
 
-## Top-Level System
+### `klomboagi/reasoning/` (all `arc_*.py` files)
+- Feature extraction, object detection, grid ops, region analysis, tiling, gravity, composition.
+- **These are live.** They're called by the solver pipeline.
 
-KlomboAGI is composed of these layers:
-1. Executive Layer
-2. Memory Layer
-3. World Model Layer
-4. Reasoning Layer
-5. Action Layer
-6. Learning Layer
-7. Safety Layer
-8. Evaluation Layer
+### `klomboagi/evals/arc_eval.py`
+- Runs the solver against ARC-AGI-1 dataset via arckit.
+- Reports accuracy, per-task results, strategy used, timing.
+- **This is the benchmark.** The only number that matters.
 
-## Executive Layer
+### `deploy/push.sh`
+- Deploys to remote MacBook Air at 192.168.68.53.
+- **WARNING: Contains hardcoded credentials.** Needs cleanup.
 
-Owns goals, priorities, and active missions.
+### `deploy/com.klomboagi.server.plist`
+- launchd service definition for the runtime server.
 
-Core modules:
-- `GoalManager`
-- `MissionManager`
-- `TaskGraph`
-- `Scheduler`
-- `ExecutiveState`
+## What Exists But Is Not Proven Live
 
-## Memory Layer
+### `klomboagi/connective/` (untracked)
+- `nexus.py`, `transfer_cortex.py`, `investigation.py`, `runtime_bridge.py`
+- Appears to be cross-module integration layer.
+- **Status: untracked, not imported by solver pipeline. Needs verification.**
 
-Stores prior experience, reusable knowledge, and self-model state.
+### `brain_core/` (Rust)
+- `learning.rs`, `plan_search.rs`, `retrieval.rs`, `scoring.rs`, `transfer.rs`
+- **Status: not wired into Python solver. Not called at runtime. Aspirational.**
 
-Memory types:
-- working memory
-- episodic memory
-- semantic memory
-- procedural memory
-- self-model
+### `runtime/` (untracked)
+- `cache/`, `logs/`, `queue/`, `state/`, `temp/`, `working_memory/`
+- Directory structure exists. **Not proven to be read/written by active code.**
 
-Core modules:
-- `WorkingMemory`
-- `EpisodeStore`
-- `KnowledgeStore`
-- `ProcedureStore`
-- `SelfModel`
-- `MemoryRetriever`
-- `MemoryConsolidator`
+### `long-term/` (untracked)
+- `archives/`, `backups/`, `checkpoints/`, `datasets/`, `evals/`, `experiments/`, `integrity/`, `manifests/`, `memory/`, `world/`
+- **Status: directory scaffolding. Not proven to be used by solver.**
 
-## World Model Layer
+### `workspace/`
+- Empty.
 
-Represents environment state, entities, relationships, and uncertainty.
+### `evals/`, `scripts/`
+- Contain only `__pycache__/`. No source files.
 
-Core modules:
-- `WorldState`
-- `EntityGraph`
-- `RelationStore`
-- `EnvironmentState`
-- `UncertaintyTracker`
-- `ChangeTracker`
+## Architecture from ARCHITECTURE.md (Original) vs Reality
 
-## Reasoning Layer
+The original ARCHITECTURE.md describes 8 layers:
+Executive, Memory, World Model, Reasoning, Action, Learning, Safety, Evaluation.
 
-Turns goals, memory, and world state into candidate actions and beliefs.
+**What actually exists in code:**
+- **Reasoning layer:** YES. `klomboagi/reasoning/` is real and working.
+- **Evaluation layer:** PARTIAL. `arc_eval.py` exists and works.
+- **Everything else:** Described but not implemented as running code.
 
-Core modules:
-- `Planner`
-- `HypothesisEngine`
-- `Critic`
-- `Verifier`
-- `ContradictionDetector`
-- `AbstractionEngine`
+This is not a criticism. It's where we are. The gap between the vision and current state is the roadmap.
 
-## Action Layer
+## The _try_ Problem
 
-Executes bounded actions and captures structured observations.
+486 `def _try_*` functions across the reasoning module.
+Each one is a hand-coded pattern matcher for a specific ARC task type.
 
-Core modules:
-- `ToolRouter`
-- `ActionExecutor`
-- `ObservationCollector`
-- `SimulationSandbox`
-- `RecoveryManager`
+This is the opposite of learning. Each function is ME (Claude) being smart, not THE SYSTEM being smart. Per CLAUDE.md, this is technically theater.
 
-## Learning Layer
+**However:** These functions produce the 341/1000 score. They're real results.
+The honest framing: this is a hand-coded baseline that a learning system needs to beat.
 
-Improves future behavior from prior outcomes.
+## Total _try_ Counts by File
 
-Core modules:
-- `EpisodeAnalyzer`
-- `FailureAnalyzer`
-- `SkillExtractor`
-- `StrategyOptimizer`
-- `BeliefUpdater`
+| File | _try_ count |
+|------|-------------|
+| arc_smart_solver.py | 636 |
+| arc_solver.py | 251 |
+| arc_learner.py | 64 |
+| arc_multiobj.py | 52 |
+| arc_advanced.py | 48 |
+| arc_tiling.py | 22 |
+| arc_region.py | 14 |
+| arc_object_solver.py | 14 |
+| arc_gravity.py | 12 |
+| arc_extraction.py | 12 |
 
-## Safety Layer
+## What Needs to Happen
 
-Constrains action and gates high-risk behavior.
-
-Core modules:
-- `PolicyEngine`
-- `RiskScorer`
-- `BoundaryGuard`
-- `AutonomyGovernor`
-- `InterpretabilityLog`
-
-## Evaluation Layer
-
-Determines whether the system is actually improving.
-
-Core modules:
-- `BenchmarkRunner`
-- `AutonomyEval`
-- `MemoryEval`
-- `TransferEval`
-- `RecoveryEval`
-- `RegressionTracker`
-
-## Canonical Loop
-
-1. observe
-2. update world state
-3. retrieve relevant memory
-4. refine active goals
-5. generate plans
-6. critique and verify
-7. act
-8. observe outcomes
-9. analyze episode
-10. consolidate learning
-
-## Success Condition
-
-The architecture is successful only if it produces systems that are measurably:
-- more persistent
-- more adaptive
-- more self-correcting
-- more transferable
-- more autonomous over time
+1. The `_try_*` functions define the ceiling for hand-coded approaches.
+2. A real learning system must discover strategies that match or exceed this ceiling.
+3. `brain_core/` (Rust) and `connective/` need to be wired in or deleted.
+4. `deploy/push.sh` needs credentials removed.
+5. Empty dirs (`workspace/`, `evals/`, `scripts/`) should be cleaned up or populated.
