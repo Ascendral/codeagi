@@ -14,10 +14,11 @@ from dataclasses import dataclass, field
 from typing import Any
 from collections import Counter
 
-from klomboagi.reasoning.arc_solver import ARCSolverV10, Grid
+Grid = list[list[int]]
 
-
-MEMORY_PATH = "/Volumes/AIStorage/AI/klomboagi/memory/arc_memory.json"
+# Default memory path: relative to project root
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+MEMORY_PATH = os.path.join(_PROJECT_ROOT, "runtime", "state", "arc_memory.json")
 
 
 @dataclass
@@ -27,6 +28,7 @@ class PuzzleEpisode:
     solved: bool
     strategy_used: str | None       # Which strategy cracked it
     strategies_tried: list[str]     # All strategies attempted
+    attempt_trace: list[dict[str, str]] = field(default_factory=list)
     input_properties: dict          # Grid size, color count, symmetry, etc.
     output_properties: dict
     time_ms: int = 0
@@ -37,6 +39,7 @@ class PuzzleEpisode:
             "solved": self.solved,
             "strategy_used": self.strategy_used,
             "strategies_tried": self.strategies_tried,
+            "attempt_trace": self.attempt_trace,
             "input_properties": self.input_properties,
             "output_properties": self.output_properties,
             "time_ms": self.time_ms,
@@ -128,7 +131,6 @@ class ARCLearner:
     """
 
     def __init__(self, memory_path: str = MEMORY_PATH) -> None:
-        self.solver = ARCSolverV10()
         self.memory_path = memory_path
         self.episodes: list[PuzzleEpisode] = []
         self.strategy_profiles: dict[str, StrategyProfile] = {}
@@ -170,48 +172,140 @@ class ARCLearner:
         with open(self.memory_path, 'w') as f:
             json.dump(data, f, indent=2)
 
+    def record_episode(self, task_id: str, solved: bool, strategy_used: str | None,
+                       train: list[dict], test_input: Grid, time_ms: float = 0,
+                       strategies_tried: list[str] | None = None,
+                       attempt_trace: list[dict[str, str]] | None = None,
+                       save: bool = False) -> PuzzleEpisode:
+        """
+        Record an episode from an external solver run.
+
+        Called by the eval loop AFTER SmartARCSolverV2.solve() returns.
+        Does not run the solver itself — just records what happened.
+        """
+        input_props = analyze_grid(test_input) if test_input else (analyze_grid(train[0]["input"]) if train else {})
+        output_props = analyze_grid(train[0]["output"]) if train else {}
+        tried = list(strategies_tried or ([strategy_used] if strategy_used else []))
+        trace = list(attempt_trace or [])
+
+        episode = PuzzleEpisode(
+            puzzle_id=task_id,
+            solved=solved,
+            strategy_used=strategy_used if solved else None,
+            strategies_tried=tried,
+            attempt_trace=trace,
+            input_properties=input_props,
+            output_properties=output_props,
+            time_ms=int(time_ms),
+        )
+        self.episodes.append(episode)
+
+        # Update strategy profiles from the full trace when available.
+        if trace:
+            seen: set[str] = set()
+            for attempt in trace:
+                name = attempt.get("strategy")
+                outcome = attempt.get("outcome", "skip")
+                if not name or name in seen:
+                    continue
+                seen.add(name)
+                if name not in self.strategy_profiles:
+                    self.strategy_profiles[name] = StrategyProfile(name=name)
+                prof = self.strategy_profiles[name]
+                if outcome == "success":
+                    prof.successes += 1
+                    prof.works_when.append(input_props)
+                elif outcome in {"reject", "wrong"}:
+                    prof.failures += 1
+                    prof.fails_when.append(input_props)
+                else:
+                    prof.skips += 1
+        elif strategy_used:
+            if strategy_used not in self.strategy_profiles:
+                self.strategy_profiles[strategy_used] = StrategyProfile(name=strategy_used)
+            prof = self.strategy_profiles[strategy_used]
+            if solved:
+                prof.successes += 1
+                prof.works_when.append(input_props)
+            else:
+                prof.failures += 1
+                prof.fails_when.append(input_props)
+
+        if save:
+            self._save_memory()
+        return episode
+
+    def get_strategy_scores(self, train: list[dict], test_input: Grid | None = None) -> dict[str, float]:
+        """
+        Return learned score boosts for strategies based on past experience.
+
+        Returns dict mapping strategy key (e.g. "phase1:_try_mirror_symmetry")
+        to a float score (0.0 to 1.0) representing learned confidence.
+
+        SmartARCSolverV2 consumes this via solver._learned_scores.
+        """
+        if not self.strategy_profiles:
+            return {}
+
+        input_props = analyze_grid(test_input) if test_input else (analyze_grid(train[0]["input"]) if train else {})
+
+        scores: dict[str, float] = {}
+        for name, prof in self.strategy_profiles.items():
+            if prof.successes + prof.failures == 0:
+                continue
+
+            # Base score from success rate
+            score = prof.success_rate
+
+            # Bonus for similarity to past successes (last 20)
+            for past_props in prof.works_when[-20:]:
+                sim = self._property_similarity(input_props, past_props)
+                score += sim * 0.1
+
+            # Penalty for similarity to past failures (last 20)
+            for past_props in prof.fails_when[-20:]:
+                sim = self._property_similarity(input_props, past_props)
+                score -= sim * 0.05
+
+            scores[name] = max(0.0, min(1.0, score))
+
+        return scores
+
+    # DEPRECATED: solve_and_learn uses ARCSolverV10 (many versions behind).
+    # Use SmartARCSolverV2.solve() + learner.record_episode() instead.
     def solve_and_learn(self, puzzle_id: str, train: list[dict], test_input: Grid,
                         expected_output: Grid | None = None) -> tuple[Grid | None, PuzzleEpisode]:
-        """
-        Solve a puzzle AND learn from the attempt.
-        
-        If expected_output is provided, records whether each strategy
-        was right or wrong — that's how it learns.
-        """
+        """DEPRECATED — uses old V10 solver. Use record_episode() instead."""
         import time
-        
+        from klomboagi.reasoning.arc_solver import ARCSolverV10
+        solver = ARCSolverV10()
+
         input_props = analyze_grid(train[0]["input"]) if train else {}
         output_props = analyze_grid(train[0]["output"]) if train else {}
-        
-        # Get strategy ordering based on what we've learned
-        strategy_order = self._get_strategy_order(input_props, output_props)
-        
+
+        strategy_order = self._get_strategy_order(input_props, output_props, solver)
+
         start = time.time()
         strategies_tried = []
         winning_strategy = None
         result = None
-        
-        # Try strategies in learned order
+
         for strategy_name, strategy_fn in strategy_order:
             strategies_tried.append(strategy_name)
             try:
                 r = strategy_fn(train, test_input)
                 if r is not None:
-                    # Cross-validate
-                    if self.solver._cross_validate(strategy_fn, train):
+                    if solver._cross_validate(strategy_fn, train):
                         result = r
                         winning_strategy = strategy_name
                         break
             except Exception:
                 continue
-        
+
         elapsed = int((time.time() - start) * 1000)
-        
-        # Determine if we solved it
         solved = result is not None and (expected_output is None or result == expected_output)
         wrong = result is not None and expected_output is not None and result != expected_output
-        
-        # Record episode
+
         episode = PuzzleEpisode(
             puzzle_id=puzzle_id,
             solved=solved,
@@ -222,12 +316,10 @@ class ARCLearner:
             time_ms=elapsed,
         )
         self.episodes.append(episode)
-        
-        # Update strategy profiles
+
         if winning_strategy:
             if winning_strategy not in self.strategy_profiles:
                 self.strategy_profiles[winning_strategy] = StrategyProfile(name=winning_strategy)
-            
             prof = self.strategy_profiles[winning_strategy]
             if solved:
                 prof.successes += 1
@@ -235,26 +327,21 @@ class ARCLearner:
             elif wrong:
                 prof.failures += 1
                 prof.fails_when.append(input_props)
-        
-        # Record skips for strategies that returned None
+
         for s_name in strategies_tried:
             if s_name != winning_strategy:
                 if s_name not in self.strategy_profiles:
                     self.strategy_profiles[s_name] = StrategyProfile(name=s_name)
                 self.strategy_profiles[s_name].skips += 1
-        
+
         self._save_memory()
         return result, episode
 
-    def _get_strategy_order(self, input_props: dict, output_props: dict) -> list[tuple[str, Any]]:
-        """
-        Order strategies based on what we've learned works for similar puzzles.
-        
-        This is the learning payoff — instead of fixed order, we prioritize
-        strategies that have worked on puzzles with similar properties.
-        """
-        # Get all strategies from solver
-        all_strategies = self._get_all_strategies()
+    # DEPRECATED: Used by solve_and_learn only
+    def _get_strategy_order(self, input_props: dict, output_props: dict,
+                            solver=None) -> list[tuple[str, Any]]:
+        """DEPRECATED — used by solve_and_learn only."""
+        all_strategies = self._get_all_strategies(solver)
         
         if not self.strategy_profiles:
             return all_strategies  # No learning yet, use default order
@@ -312,9 +399,12 @@ class ARCLearner:
         
         return matches / total if total > 0 else 0.0
 
-    def _get_all_strategies(self) -> list[tuple[str, Any]]:
-        """Get all strategies with their names."""
-        solver = self.solver
+    # DEPRECATED: Used by solve_and_learn only
+    def _get_all_strategies(self, solver=None) -> list[tuple[str, Any]]:
+        """DEPRECATED — used by solve_and_learn only."""
+        if solver is None:
+            from klomboagi.reasoning.arc_solver import ARCSolverV10
+            solver = ARCSolverV10()
         strategies = [
             ("identity", solver._try_identity),
             ("position_transform", solver._try_position_transform),

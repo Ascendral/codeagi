@@ -18,6 +18,19 @@ Grid = list[list[int]]
 class SmartARCSolver(ARCSolverV18):
     """Uses learned strategy ordering instead of fixed order."""
 
+    def _reset_learning_trace(self) -> None:
+        self._last_strategy = None
+        self._last_scored = []
+        self._attempt_trace = []
+        self._learning_reordered = False
+
+    def _record_attempt(self, strategy: str, outcome: str) -> None:
+        trace = getattr(self, "_attempt_trace", None)
+        if trace is None:
+            trace = []
+            self._attempt_trace = trace
+        trace.append({"strategy": strategy, "outcome": outcome})
+
     def solve(self, train: list[dict], test_input: Grid) -> Grid | None:
         ex = train[0]
         inp, out = ex["input"], ex["output"]
@@ -41,6 +54,8 @@ class SmartARCSolver(ARCSolverV18):
             if attr.startswith('_try_') and callable(getattr(self, attr)):
                 all_strategies.append((attr, getattr(self, attr)))
 
+        learned = getattr(self, '_learned_scores', {})
+        baseline_scored = []
         scored = []
         for sname, sfn in all_strategies:
             score = 1
@@ -80,17 +95,37 @@ class SmartARCSolver(ARCSolverV18):
             if sname in ['_try_identity', '_try_position_transform']:
                 score += 15
 
+            base_score = score
+            baseline_scored.append((base_score, sname, sfn))
+
+            # Learned score boost from prior experience
+            learned_key = f"phase1:{sname}"
+            if learned_key in learned:
+                score += min(learned[learned_key] * 10, 8)  # Cap at 8
+
             scored.append((score, sname, sfn))
 
+        baseline_scored.sort(key=lambda x: -x[0])
         scored.sort(key=lambda x: -x[0])
+        self._learning_reordered = (
+            [name for _, name, _ in baseline_scored] !=
+            [name for _, name, _ in scored]
+        )
 
         for score, sname, sfn in scored:
+            strategy_name = f"phase1:{sname}"
             try:
                 result = sfn(train, test_input)
-                if result is not None:
-                    if self._cross_validate(sfn, train):
-                        return result
-            except:
+                if result is None:
+                    self._record_attempt(strategy_name, "skip")
+                    continue
+                if self._cross_validate(sfn, train):
+                    self._record_attempt(strategy_name, "success")
+                    self._last_strategy = strategy_name
+                    return result
+                self._record_attempt(strategy_name, "reject")
+            except Exception:
+                self._record_attempt(strategy_name, "error")
                 continue
 
         # Store scored strategies on instance for subclass use
@@ -169,13 +204,21 @@ class SmartARCSolverV2(SmartARCSolver):
             return None
 
     def solve(self, train, test_input):
+        self._reset_learning_trace()
+
         # ── Pre-phase lookup strategies (self-validating, skip CV) ──
         for lookup_fn in [self._try_key_shape_recolors_main, self._try_block_pattern_lookup]:
+            strategy_name = f"pre_lookup:{lookup_fn.__name__}"
             try:
                 result = lookup_fn(train, test_input)
-                if result is not None:
-                    return result
+                if result is None:
+                    self._record_attempt(strategy_name, "skip")
+                    continue
+                self._record_attempt(strategy_name, "success")
+                self._last_strategy = strategy_name
+                return result
             except Exception:
+                self._record_attempt(strategy_name, "error")
                 continue
 
         # ── Pre-phase: high-precision v2 strategies (cross-validated) ──
@@ -189,12 +232,19 @@ class SmartARCSolverV2(SmartARCSolver):
                        self._try_line_from_markers_recolor_rects,
                        self._try_fill_columns_with_terminator,
                        self._try_grid_cell_fill_by_corner_marker]:
+            strategy_name = f"pre_v2:{pre_fn.__name__}"
             try:
                 result = pre_fn(train, test_input)
-                if result is not None:
-                    if self._cross_validate(pre_fn, train):
-                        return result
+                if result is None:
+                    self._record_attempt(strategy_name, "skip")
+                    continue
+                if self._cross_validate(pre_fn, train):
+                    self._record_attempt(strategy_name, "success")
+                    self._last_strategy = strategy_name
+                    return result
+                self._record_attempt(strategy_name, "reject")
             except Exception:
+                self._record_attempt(strategy_name, "error")
                 continue
 
         # ── Phase 0: High-confidence specific learners (before hand-coded) ─────
@@ -212,13 +262,18 @@ class SmartARCSolverV2(SmartARCSolver):
                        learn_cross_from_dots, learn_diamond_expand,
                        learn_arrow_ray, learn_lshape_concavity,
                        learn_ushape_gap_drop, learn_template_stamp_at_marker]:
+            strategy_name = f"phase0:{p0_fn.__name__}"
             result = SmartARCSolverV2._try_learner(p0_fn, train, test_input, loo=True)
             if result is not None:
+                self._record_attempt(strategy_name, "success")
+                self._last_strategy = strategy_name
                 return result
+            self._record_attempt(strategy_name, "skip")
 
         # ── Phase 1: 106 hand-coded strategies (cross-validated) ──────────────
         result = super().solve(train, test_input)
         if result is not None:
+            # _last_strategy set by SmartARCSolver.solve() below
             return result
 
         # ── Phase 2: Learned rule families (LOO validated) ────────────────────
@@ -299,22 +354,33 @@ class SmartARCSolverV2(SmartARCSolver):
 
         # Try extra learners first (fast, specific)
         for learn_fn, loo in extra_learners:
+            strategy_name = f"phase2_extra:{learn_fn.__name__}"
             result = self._try_learner(learn_fn, train, test_input, loo=loo)
             if result is not None:
+                self._record_attempt(strategy_name, "success")
+                self._last_strategy = strategy_name
                 return result
+            self._record_attempt(strategy_name, "skip")
 
         # Try classifier-ordered families
         for family in ordered:
             learn_fn, loo = family_learner_map[family]
+            strategy_name = f"phase2:{family}"
             result = self._try_learner(learn_fn, train, test_input, loo=loo)
             if result is not None:
+                self._record_attempt(strategy_name, "success")
+                self._last_strategy = strategy_name
                 return result
+            self._record_attempt(strategy_name, "skip")
 
         # DSL program synthesis (composable primitives, depth 1-3)
         from klomboagi.reasoning.arc_dsl_v2 import synthesize
         synth_result = synthesize(train, test_input, max_depth=3, timeout_ms=2000)
         if synth_result is not None:
+            self._record_attempt("dsl", "success")
+            self._last_strategy = "dsl"
             return synth_result
+        self._record_attempt("dsl", "skip")
 
         # ── Phase 2b: Object-level compositional solver ──────────────────────
         try:
@@ -322,8 +388,12 @@ class SmartARCSolverV2(SmartARCSolver):
             obj_solver = CompositionalObjectSolver()
             obj_result = obj_solver.solve(train, test_input)
             if obj_result is not None:
+                self._record_attempt("object_solver", "success")
+                self._last_strategy = "object_solver"
                 return obj_result
+            self._record_attempt("object_solver", "skip")
         except Exception:
+            self._record_attempt("object_solver", "error")
             pass
 
         # ── Phase 2c: Reasoning-driven solver ────────────────────────────────
@@ -332,8 +402,12 @@ class SmartARCSolverV2(SmartARCSolver):
             reasoner = ARCReasoner()
             reason_result = reasoner.solve(train, test_input)
             if reason_result is not None:
+                self._record_attempt("reasoner", "success")
+                self._last_strategy = "reasoner"
                 return reason_result
+            self._record_attempt("reasoner", "skip")
         except Exception:
+            self._record_attempt("reasoner", "error")
             pass
 
         # ── Phase 3: V2 hand-coded strategies (cross-validated) ───────────────
@@ -585,27 +659,44 @@ class SmartARCSolverV2(SmartARCSolver):
             self._try_most_common_cross_arm_color,
         ]
         for s in v2:
+            strategy_name = f"phase3:{s.__name__}"
             try:
                 r = s(train, test_input)
-                if r is not None and self._cross_validate(s, train):
+                if r is None:
+                    self._record_attempt(strategy_name, "skip")
+                    continue
+                if self._cross_validate(s, train):
+                    self._record_attempt(strategy_name, "success")
+                    self._last_strategy = strategy_name
                     return r
-            except:
+                self._record_attempt(strategy_name, "reject")
+            except Exception:
+                self._record_attempt(strategy_name, "error")
                 continue
 
         # ── Phase 3.5: Lookup strategies (skip cross-validation) ─────────────
         for s in [self._try_shape_pattern_to_value]:
+            strategy_name = f"phase3_lookup:{s.__name__}"
             try:
                 r = s(train, test_input)
-                if r is not None:
-                    return r
-            except:
+                if r is None:
+                    self._record_attempt(strategy_name, "skip")
+                    continue
+                self._record_attempt(strategy_name, "success")
+                self._last_strategy = strategy_name
+                return r
+            except Exception:
+                self._record_attempt(strategy_name, "error")
                 pass
 
         # ── Phase 4: LLM refinement loop (verified) ───────────────────────────
         from klomboagi.reasoning.arc_llm_solver import solve_with_llm
         llm_result = solve_with_llm(train, test_input, max_attempts=5)
         if llm_result is not None:
+            self._record_attempt("llm", "success")
+            self._last_strategy = "llm"
             return llm_result
+        self._record_attempt("llm", "skip")
 
         # ── Phase 5: Disabled — unvalidated fallback produces too many wrong
         # results (pattern_rule alone fires 176 times incorrectly without LOO).
