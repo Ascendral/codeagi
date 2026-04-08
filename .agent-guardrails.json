@@ -1,0 +1,9 @@
+{
+  "version": "1.0",
+  "verificationCommand": "echo 'Theory paper - no code to verify'",
+  "rules": {
+    "no_theater": "Do not claim work is done without verification",
+    "no_fake_progress": "Do not write code and call it learned behavior",
+    "honesty_first": "Say I don't know when you don't know"
+  }
+}
